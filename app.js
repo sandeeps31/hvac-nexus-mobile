@@ -189,6 +189,8 @@ function renderPage(page, params) {
       case 'quality':      renderQuality(main); break;
       case 'commissioning':renderCommissioning(main); break;
       case 'procurement':  renderProcurement(main); break;
+      case 'drawings':     renderDrawingsModule(main); break;
+      case 'equipment':    renderEquipmentModule(main); break;
       // Sub-pages (stubs — will be built per module)
       default:
         renderComingSoon(main, page);
@@ -415,6 +417,71 @@ function renderProcurement(main) {
     + makeModuleItem('pos',         '#60A5FA', 'rgba(59,130,246,0.15)',  posIcon(),       'Purchase Orders',    'View')
 
     + '</div>';
+}
+
+// ── Drawings Module ───────────────────────────────────────
+var _drawingsLoaded = false;
+function renderDrawingsModule(main) {
+  if (!_drawingsLoaded) {
+    _drawingsLoaded = true;
+    var s = document.createElement('script');
+    s.src = 'drawings.html';
+    // Load via fetch+eval to get the script from the HTML file
+  }
+  // Use iframe-less approach: load script tag from drawings.html
+  loadModuleScript('drawings.html', function() {
+    if (window.renderDrawingsPage) renderDrawingsPage(main);
+    else renderComingSoon(main, 'drawings');
+  });
+}
+
+// ── Equipment Module ───────────────────────────────────────
+var _equipmentLoaded = false;
+function renderEquipmentModule(main) {
+  loadModuleScript('equipment.html', function() {
+    if (window.renderEquipmentPage) renderEquipmentPage(main);
+    else renderComingSoon(main, 'equipment');
+  });
+}
+
+// ── Module Script Loader ───────────────────────────────────
+// Fetches an HTML module file, extracts and executes its <script> tags,
+// then calls the callback. Caches so scripts only execute once.
+var _loadedModules = {};
+function loadModuleScript(url, callback) {
+  if (_loadedModules[url]) {
+    callback();
+    return;
+  }
+  fetch(url)
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      // Extract all <script> tags that don't have src
+      var scripts = [];
+      var re = /<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/gi;
+      var m;
+      while ((m = re.exec(html)) !== null) {
+        scripts.push(m[1]);
+      }
+      // Also extract linked CSS and append to head
+      var styleRe = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+      var sm;
+      while ((sm = styleRe.exec(html)) !== null) {
+        var styleEl = document.createElement('style');
+        styleEl.textContent = sm[1];
+        document.head.appendChild(styleEl);
+      }
+      // Execute scripts
+      scripts.forEach(function(code) {
+        try { new Function(code)(); } catch(e) { console.warn('[ModuleLoader]', url, e); }
+      });
+      _loadedModules[url] = true;
+      callback();
+    })
+    .catch(function(e) {
+      console.warn('[ModuleLoader] Failed to load:', url, e);
+      callback();
+    });
 }
 
 // ── Coming Soon Stub ───────────────────────────────────────
