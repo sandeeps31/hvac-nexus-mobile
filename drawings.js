@@ -374,21 +374,24 @@ function _renderPdf(url){
   pdfjsLib.getDocument(url).promise.then(function(doc){return doc.getPage(1);}).then(function(page){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
-    var dpr=window.devicePixelRatio||2;
     var vp0=page.getViewport({scale:1});
-    // Fit to screen at 1x, then render at dpr for retina sharpness
-    var fit=Math.min(w.clientWidth/vp0.width,w.clientHeight/vp0.height)*0.95;
-    var renderScale=fit*dpr;
-    var vp=page.getViewport({scale:renderScale});
+    // Render at high resolution — 3x base scale for sharp PDF on retina
+    var RENDER_SCALE = 3;
+    var vp=page.getViewport({scale:RENDER_SCALE});
     var c=document.getElementById('dwg-cvs');
-    // Canvas physical size = rendered size (high res)
+    // Physical canvas = full high-res render
     c.width=vp.width; c.height=vp.height;
-    // CSS size = logical fit size (so it displays at fit scale)
-    c.style.width=(vp.width/dpr)+'px';
-    c.style.height=(vp.height/dpr)+'px';
+    // CSS display size = fit to screen
+    var fitW=w.clientWidth*0.95;
+    var fitH=w.clientHeight*0.95;
+    var fitScale=Math.min(fitW/vp.width, fitH/vp.height);
+    var cssW=vp.width*fitScale;
+    var cssH=vp.height*fitScale;
+    c.style.width=cssW+'px';
+    c.style.height=cssH+'px';
     _sc=1;
-    _tx=(w.clientWidth-(vp.width/dpr))/2;
-    _ty=(w.clientHeight-(vp.height/dpr))/2;
+    _tx=(w.clientWidth-cssW)/2;
+    _ty=(w.clientHeight-cssH)/2;
     _at();
     page.render({canvasContext:c.getContext('2d'),viewport:vp});
     _rp();
