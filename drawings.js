@@ -124,13 +124,8 @@ if (!document.getElementById('dwg-viewer-overlay')) {
   pd.innerHTML = '<div class="pin-det-sht" id="pin-det-body"></div>';
   document.body.appendChild(pd);
 
-  // Wire events
-  document.getElementById('vwr-back').onclick = dwgCloseViewer;
-  document.getElementById('vwr-fit').onclick = dwgFit;
-  document.getElementById('pin-save').onclick = dwgSavePin;
-  document.getElementById('pin-cancel').onclick = function(){ document.getElementById('pin-add-ov').style.display='none'; _pc=null; };
-  document.getElementById('pin-add-ov').onclick = function(e){ if(e.target===this){ this.style.display='none'; _pc=null; } };
-  document.getElementById('pin-det-ov').onclick = function(e){ if(e.target===this) this.style.display='none'; };
+  // Wire events — deferred so all window.* functions are defined first
+  // (event wiring moved to _wireEvents() called at end of IIFE)
 
   // Canvas touch/mouse
   var wrap = document.getElementById('dwg-wrap');
@@ -407,5 +402,22 @@ window.dwgDelPin=function(id){
   document.getElementById('pin-det-ov').style.display='none';
   _rp();
 };
+
+// Wire button events after all functions defined
+document.getElementById('vwr-back').onclick = function(){ 
+  document.getElementById('dwg-viewer-overlay').classList.remove('open');
+  _cur=null; _pdfPage=null;
+  var c=document.getElementById('dwg-cvs');
+  if(c){c.getContext('2d').clearRect(0,0,c.width,c.height);}
+};
+document.getElementById('vwr-fit').onclick = function(){
+  if(!_pdfPage) return;
+  var w=document.getElementById('dwg-wrap'),c=document.getElementById('dwg-cvs');
+  _sc=1; _tx=(w.clientWidth-c.width)/2; _ty=(w.clientHeight-c.height)/2; _at();
+};
+document.getElementById('pin-save').onclick = function(){ window.dwgSavePin(); };
+document.getElementById('pin-cancel').onclick = function(){ document.getElementById('pin-add-ov').style.display='none'; _pc=null; };
+document.getElementById('pin-add-ov').onclick = function(e){ if(e.target===this){ this.style.display='none'; _pc=null; } };
+document.getElementById('pin-det-ov').onclick = function(e){ if(e.target===this) this.style.display='none'; };
 
 })();
