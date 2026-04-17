@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0A1628">
+  <title>HVAC Nexus — Sign In</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="app.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* Background */
+    .login-bg {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 0;
+    }
+    .login-bg::before {
+      content: '';
+      position: absolute;
+      top: -100px; left: -100px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .login-bg::after {
+      content: '';
+      position: absolute;
+      bottom: -80px; right: -80px;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(167,139,250,0.08) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    /* Layout */
+    .login-wrap {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top, 0px) 28px env(safe-area-inset-bottom, 0px);
+    }
+
+    /* Logo area */
+    .login-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 72px;
+      padding-bottom: 48px;
+      flex-shrink: 0;
+    }
+    .logo-mark {
+      width: 72px; height: 72px;
+      background: linear-gradient(135deg, #1a3a6b 0%, #0f2347 100%);
+      border: 1px solid rgba(59,130,246,0.3);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 32px rgba(59,130,246,0.2);
+    }
+    .logo-mark svg {
+      width: 38px; height: 38px;
+    }
+    .logo-name {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+    .logo-tagline {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    /* Form card */
+    .login-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 28px 24px;
+      box-shadow: var(--shadow-float);
+    }
+    .login-card h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+    }
+    .login-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+    }
+
+    /* Input with icon */
+    .input-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .input-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-tertiary);
+      pointer-events: none;
+      display: flex;
+    }
+    .input-icon svg { width: 18px; height: 18px; }
+    .login-input {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 44px 14px 44px;
+      color: var(--text-primary);
+      font-size: 15px;
+      font-family: var(--font);
+      outline: none;
+      transition: var(--transition);
+      -webkit-appearance: none;
+    }
+    .login-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .login-input::placeholder { color: var(--text-tertiary); }
+
+    /* Password toggle */
+    .pw-toggle {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-tertiary);
+      padding: 4px;
+      cursor: pointer;
+      display: flex;
+    }
+    .pw-toggle svg { width: 18px; height: 18px; }
+
+    /* Sign in button */
+    .login-btn {
+      width: 100%;
+      padding: 15px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      margin-top: 8px;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .login-btn:active { opacity: 0.85; transform: scale(0.98); }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Spinner inside button */
+    .btn-spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* Error message */
+    .login-error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #F87171;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .login-error svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .login-error.hidden { display: none; }
+
+    /* Forgot password */
+    .forgot-link {
+      text-align: center;
+      margin-top: 18px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .forgot-link a {
+      color: var(--accent);
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    /* Footer */
+    .login-footer {
+      margin-top: auto;
+      padding: 24px 0 16px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    /* Tablet */
+    @media (min-width: 768px) {
+      .login-wrap {
+        max-width: 420px;
+        margin: 0 auto;
+        padding-left: 0;
+        padding-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-bg"></div>
+
+  <div class="login-wrap">
+
+    <!-- Logo -->
+    <div class="login-logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- HVAC icon: airflow / duct symbol -->
+          <rect x="6" y="18" width="36" height="12" rx="6" stroke="#60A5FA" stroke-width="2.5" fill="none"/>
+          <path d="M18 18 C18 12 24 10 24 10 C24 10 30 12 30 18" stroke="#60A5FA" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <circle cx="24" cy="24" r="3" fill="#3B82F6"/>
+          <path d="M10 24 L6 24 M42 24 L38 24" stroke="#60A5FA" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M18 30 C18 36 24 38 24 38 C24 38 30 36 30 30" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="logo-name">HVAC Nexus</div>
+      <div class="logo-tagline">Project Management — Field App</div>
+    </div>
+
+    <!-- Form -->
+    <div class="login-card">
+      <h2>Sign in</h2>
+      <p>Use your HVAC Nexus account credentials</p>
+
+      <!-- Error -->
+      <div id="login-error" class="login-error hidden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="login-error-msg">Invalid email or password.</span>
+      </div>
+
+      <!-- Email -->
+      <div class="input-wrap">
+        <div class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </div>
+        <input
+          id="login-email"
+          class="login-input"
+          type="email"
+          placeholder="Email address"
+          autocomplete="email"
+          inputmode="email"
+        >
+      </div>
+
+      <!-- Password -->
+      <div class="input-wrap">
+        <div class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <input
+          id="login-password"
+          class="login-input"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+        >
+        <div class="pw-toggle" onclick="togglePw()" id="pw-toggle-btn">
+          <svg id="pw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+      </div>
+
+      <!-- Sign in button -->
+      <button id="login-btn" class="login-btn" onclick="doLogin()">
+        Sign in
+      </button>
+
+      <div class="forgot-link">
+        <a onclick="doForgot()">Forgot password?</a>
+      </div>
+    </div>
+
+    <div class="login-footer">
+      © 2026 HVAC Nexus · Secure sign in via Supabase Auth
+    </div>
+
+  </div>
+
+  <script>
+    // ── Supabase setup ─────────────────────────────────────
+    var SUPABASE_URL     = 'https://qbsjrccrgkbevncvxbio.supabase.co';
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFic2pyY2NyZ2tiZXZuY3Z4YmlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI3MTU3MjgsImV4cCI6MjA1ODI5MTcyOH0.5ZeYB3RnpMBpkDv9hxfHBjC0N5OVCudxOtSIGFl4qoc';
+
+    var _sb = null;
+
+    var sbReady = new Promise(function(resolve) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+      s.onload = function() {
+        _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { persistSession: true, autoRefreshToken: true }
+        });
+        resolve(_sb);
+      };
+      document.head.appendChild(s);
+    });
+
+    // ── Password toggle ────────────────────────────────────
+    var _pwVisible = false;
+    function togglePw() {
+      _pwVisible = !_pwVisible;
+      var inp = document.getElementById('login-password');
+      inp.type = _pwVisible ? 'text' : 'password';
+      document.getElementById('pw-eye').style.opacity = _pwVisible ? '1' : '0.5';
+    }
+
+    // ── Show error ─────────────────────────────────────────
+    function showError(msg) {
+      var el = document.getElementById('login-error');
+      document.getElementById('login-error-msg').textContent = msg;
+      el.classList.remove('hidden');
+    }
+    function hideError() {
+      document.getElementById('login-error').classList.add('hidden');
+    }
+
+    // ── Set button loading state ───────────────────────────
+    function setLoading(loading) {
+      var btn = document.getElementById('login-btn');
+      btn.disabled = loading;
+      btn.innerHTML = loading
+        ? '<div class="btn-spinner"></div>'
+        : 'Sign in';
+    }
+
+    // ── Login ──────────────────────────────────────────────
+    async function doLogin() {
+      hideError();
+      var email = document.getElementById('login-email').value.trim();
+      var pw    = document.getElementById('login-password').value;
+
+      if (!email) { showError('Please enter your email address.'); return; }
+      if (!pw)    { showError('Please enter your password.'); return; }
+
+      setLoading(true);
+
+      try {
+        await sbReady;
+        var res = await _sb.auth.signInWithPassword({ email: email, password: pw });
+
+        if (res.error) {
+          setLoading(false);
+          if (res.error.message && res.error.message.toLowerCase().indexOf('invalid') !== -1) {
+            showError('Incorrect email or password. Please try again.');
+          } else if (res.error.message && res.error.message.toLowerCase().indexOf('network') !== -1) {
+            showError('Network error — check your connection and try again.');
+          } else {
+            showError(res.error.message || 'Sign in failed. Please try again.');
+          }
+          return;
+        }
+
+        // Success — store session info for app use
+        var user = res.data.user;
+        var meta = user.user_metadata || {};
+
+        localStorage.setItem('hvacnexus_current_user', JSON.stringify({
+          id:    user.id,
+          email: user.email,
+          name:  meta.full_name || meta.name || user.email
+        }));
+
+        // Load company + last project
+        await loadUserContext(user);
+
+        // Redirect to app
+        window.location.href = 'index.html';
+
+      } catch(e) {
+        setLoading(false);
+        showError('Something went wrong. Please try again.');
+        console.error('[Login]', e);
+      }
+    }
+
+    // ── Load company + project context ─────────────────────
+    async function loadUserContext(user) {
+      try {
+        // Get company membership
+        var mem = await _sb
+          .from('company_members')
+          .select('company_id, role, companies(name)')
+          .eq('user_id', user.id)
+          .single();
+
+        if (mem.data) {
+          localStorage.setItem('hvacnexus_company_id', mem.data.company_id);
+          var coName = mem.data.companies && mem.data.companies.name ? mem.data.companies.name : '';
+          localStorage.setItem('hvacnexus_company_name', coName);
+          localStorage.setItem('hvacnexus_user_role', mem.data.role || '');
+        }
+
+        // Try to restore last active project
+        var lastProj = localStorage.getItem('hvacnexus_current_project');
+        if (!lastProj && mem.data && mem.data.company_id) {
+          // Load first available project
+          var proj = await _sb
+            .from('projects')
+            .select('id, name, code')
+            .eq('company_id', mem.data.company_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (proj.data) {
+            localStorage.setItem('hvacnexus_current_project', JSON.stringify({
+              id:   proj.data.id,
+              name: proj.data.name,
+              code: proj.data.code || ''
+            }));
+          }
+        }
+      } catch(e) {
+        console.warn('[Login] loadUserContext error:', e);
+        // Non-fatal — user still gets in
+      }
+    }
+
+    // ── Forgot password ────────────────────────────────────
+    async function doForgot() {
+      var email = document.getElementById('login-email').value.trim();
+      if (!email) {
+        showError('Enter your email address above first, then tap Forgot password.');
+        return;
+      }
+      hideError();
+      setLoading(true);
+      try {
+        await sbReady;
+        await _sb.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin + '/index.html'
+        });
+        setLoading(false);
+        // Replace card content with confirmation
+        document.querySelector('.login-card').innerHTML =
+          '<div style="text-align:center;padding:16px 0">'
+          + '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="1.5" style="margin-bottom:16px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+          + '<div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:8px">Check your email</div>'
+          + '<div style="font-size:14px;color:var(--text-secondary);line-height:1.6">A password reset link has been sent to <strong style="color:var(--text-primary)">' + email + '</strong></div>'
+          + '</div>';
+      } catch(e) {
+        setLoading(false);
+        showError('Could not send reset email. Try again.');
+      }
+    }
+
+    // ── Enter key support ──────────────────────────────────
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    // ── Check if already logged in ─────────────────────────
+    window.addEventListener('load', function() {
+      sbReady.then(function(sb) {
+        sb.auth.getSession().then(function(res) {
+          if (res.data && res.data.session) {
+            window.location.href = 'index.html';
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

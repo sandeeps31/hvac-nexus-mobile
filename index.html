@@ -74,6 +74,16 @@
   </div>
 
   <script src="db.js"></script>
+  <script>
+    // Redirect to login if no session
+    dbReady.then(function(sb) {
+      sb.auth.getSession().then(function(res) {
+        if (!res.data || !res.data.session) {
+          window.location.href = 'login.html';
+        }
+      });
+    });
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
