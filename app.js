@@ -208,6 +208,12 @@ async function renderHome(main) {
     await dbReady;
     var companyId = dbGetCompanyId() || localStorage.getItem('hvacnexus_company_id');
     if (companyId) {
+      // Ensure session is active before querying
+      var sessionRes = await window._supabase.auth.getSession();
+      if (!sessionRes.data || !sessionRes.data.session) {
+        window.location.href = 'login.html';
+        return;
+      }
       var res = await window._supabase
         .from('projects')
         .select('data')
@@ -217,6 +223,8 @@ async function renderHome(main) {
         projects = res.data.data.map(function(p) {
           return { id: p.id, name: p.name, code: p.num || p.code || '' };
         });
+      } else {
+        console.warn('[Home] projects query error:', res.error);
       }
     }
   } catch(e) {
