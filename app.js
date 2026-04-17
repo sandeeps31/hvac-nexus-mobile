@@ -197,60 +197,162 @@ function renderPage(page, params) {
 }
 
 // ── Home Page ──────────────────────────────────────────────
-function renderHome(main) {
-  var proj = APP.currentProject || { name: 'No Project Selected', code: '—' };
+async function renderHome(main) {
   var user = APP.currentUser || { name: 'Guest' };
   var hour = new Date().getHours();
   var greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  main.innerHTML = '<div class="page">'
+  // Load projects from Supabase
+  var projects = [];
+  try {
+    await dbReady;
+    var companyId = dbGetCompanyId() || localStorage.getItem('hvacnexus_company_id');
+    if (companyId) {
+      var res = await window._supabase
+        .from('projects')
+        .select('id, name, code')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (res.data) projects = res.data;
+    }
+  } catch(e) {
+    console.warn('[Home] Failed to load projects:', e);
+  }
+
+  // If only one project, auto-select it
+  if (projects.length === 1 && !APP.currentProject) {
+    APP.currentProject = projects[0];
+    localStorage.setItem('hvacnexus_current_project', JSON.stringify(projects[0]));
+  }
+
+  var proj = APP.currentProject;
+
+  var html = '<div class="page">'
     + '<div class="home-greeting">'
     +   '<h1>' + greeting + ', ' + (user.name ? user.name.split(' ')[0] : 'there') + '</h1>'
     +   '<p>' + new Date().toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long'}) + '</p>'
-    + '</div>'
-
-    + '<div class="project-banner">'
-    +   '<div class="project-banner-label">Active Project</div>'
-    +   '<div class="project-banner-name">' + proj.name + '</div>'
-    +   '<div class="project-banner-id">' + (proj.code || '') + '</div>'
-    + '</div>'
-
-    + '<div class="section-header"><span class="section-title">Quick Access</span></div>'
-
-    + '<div class="module-item" onclick="appNav(\'itps\')">'
-    +   '<div class="module-icon" style="background:rgba(34,197,94,0.15)">'
-    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
-    +   '</div>'
-    +   '<span class="module-label">ITPs</span>'
-    +   '<span class="module-badge badge-edit">Edit</span>'
-    + '</div>'
-
-    + '<div class="module-item" onclick="appNav(\'defects\')">'
-    +   '<div class="module-icon" style="background:rgba(239,68,68,0.15)">'
-    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-    +   '</div>'
-    +   '<span class="module-label">Defects</span>'
-    +   '<span class="module-badge badge-edit">Edit</span>'
-    + '</div>'
-
-    + '<div class="module-item" onclick="appNav(\'precx\')">'
-    +   '<div class="module-icon" style="background:rgba(167,139,250,0.15)">'
-    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>'
-    +   '</div>'
-    +   '<span class="module-label">Pre-Cx Checklist</span>'
-    +   '<span class="module-badge badge-edit">Edit</span>'
-    + '</div>'
-
-    + '<div class="module-item" onclick="appNav(\'drawings\')">'
-    +   '<div class="module-icon" style="background:rgba(59,130,246,0.15)">'
-    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
-    +   '</div>'
-    +   '<span class="module-label">Drawings</span>'
-    +   '<span class="module-badge badge-edit">Edit</span>'
-    + '</div>'
-
     + '</div>';
+
+  // Project banner or picker
+  if (proj) {
+    html += '<div class="project-banner" onclick="showProjectPicker()" style="cursor:pointer">'
+      +   '<div class="project-banner-label">Active Project <span style="opacity:0.6;font-size:10px;margin-left:6px">TAP TO CHANGE</span></div>'
+      +   '<div class="project-banner-name">' + proj.name + '</div>'
+      +   '<div class="project-banner-id">' + (proj.code || '') + '</div>'
+      + '</div>';
+  } else {
+    html += '<div class="project-banner" onclick="showProjectPicker()" style="cursor:pointer;border-color:rgba(245,158,11,0.4);background:linear-gradient(135deg,#2a1f0a 0%,#1a1200 100%)">'
+      +   '<div class="project-banner-label" style="color:#F59E0B">No Project Selected</div>'
+      +   '<div class="project-banner-name" style="font-size:15px;color:var(--text-secondary)">Tap to select a project</div>'
+      + '</div>';
+  }
+
+  // Quick access (only if project selected)
+  if (proj) {
+    html += '<div class="section-header"><span class="section-title">Quick Access</span></div>'
+
+      + '<div class="module-item" onclick="appNav(\'itps\')">'
+      +   '<div class="module-icon" style="background:rgba(34,197,94,0.15)">'
+      +     '<svg viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+      +   '</div>'
+      +   '<span class="module-label">ITPs</span>'
+      +   '<span class="module-badge badge-edit">Edit</span>'
+      +   '<svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+      + '</div>'
+
+      + '<div class="module-item" onclick="appNav(\'defects\')">'
+      +   '<div class="module-icon" style="background:rgba(239,68,68,0.15)">'
+      +     '<svg viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+      +   '</div>'
+      +   '<span class="module-label">Defects</span>'
+      +   '<span class="module-badge badge-edit">Edit</span>'
+      +   '<svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+      + '</div>'
+
+      + '<div class="module-item" onclick="appNav(\'precx\')">'
+      +   '<div class="module-icon" style="background:rgba(167,139,250,0.15)">'
+      +     '<svg viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>'
+      +   '</div>'
+      +   '<span class="module-label">Pre-Cx Checklist</span>'
+      +   '<span class="module-badge badge-edit">Edit</span>'
+      +   '<svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+      + '</div>'
+
+      + '<div class="module-item" onclick="appNav(\'drawings\')">'
+      +   '<div class="module-icon" style="background:rgba(59,130,246,0.15)">'
+      +     '<svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+      +   '</div>'
+      +   '<span class="module-label">Drawings</span>'
+      +   '<span class="module-badge badge-edit">Edit</span>'
+      +   '<svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+      + '</div>';
+  }
+
+  html += '</div>';
+  main.innerHTML = html;
+
+  // Store projects list for picker
+  APP._projects = projects;
 }
+
+// ── Project Picker Modal ───────────────────────────────────
+function showProjectPicker() {
+  var projects = APP._projects || [];
+
+  // Build modal
+  var overlay = document.createElement('div');
+  overlay.id = 'proj-picker-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;display:flex;align-items:flex-end;';
+  overlay.onclick = function(e) { if (e.target === overlay) closeProjPicker(); };
+
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:var(--bg-card);border-radius:20px 20px 0 0;width:100%;max-height:70vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,0px);animation:sheetUp 0.25s ease;';
+
+  var html = '<div style="padding:16px 20px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+    + '<span style="font-size:16px;font-weight:700;color:var(--text-primary)">Select Project</span>'
+    + '<button onclick="closeProjPicker()" style="width:32px;height:32px;border-radius:50%;background:var(--bg-elevated);color:var(--text-secondary);font-size:18px;display:flex;align-items:center;justify-content:center">×</button>'
+    + '</div>';
+
+  if (projects.length === 0) {
+    html += '<div class="empty-state" style="padding:40px 20px"><p>No projects found.<br>Create a project in the desktop app first.</p></div>';
+  } else {
+    projects.forEach(function(p) {
+      var isActive = APP.currentProject && APP.currentProject.id === p.id;
+      html += '<div onclick="selectProject(\'' + p.id + '\',\'' + p.name.replace(/'/g, "\\'") + '\',\'' + (p.code||'').replace(/'/g, "\\'") + '\')" '
+        + 'style="padding:16px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;border-bottom:1px solid var(--border);' + (isActive ? 'background:var(--accent-dim)' : '') + '">'
+        + '<div style="width:40px;height:40px;border-radius:10px;background:' + (isActive ? 'var(--accent-dim)' : 'var(--bg-elevated)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+        +   '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="' + (isActive ? '#60A5FA' : 'var(--text-secondary)') + '" stroke-width="1.8" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'
+        + '</div>'
+        + '<div style="flex:1;min-width:0">'
+        +   '<div style="font-size:15px;font-weight:600;color:' + (isActive ? 'var(--accent)' : 'var(--text-primary)') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.name + '</div>'
+        +   '<div style="font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">' + (p.code || '') + '</div>'
+        + '</div>'
+        + (isActive ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+        + '</div>';
+    });
+  }
+
+  sheet.innerHTML = html;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
+function closeProjPicker() {
+  var el = document.getElementById('proj-picker-overlay');
+  if (el) el.remove();
+}
+
+function selectProject(id, name, code) {
+  APP.currentProject = { id: id, name: name, code: code };
+  localStorage.setItem('hvacnexus_current_project', JSON.stringify(APP.currentProject));
+  closeProjPicker();
+  appNav('home');
+}
+
+// Add sheet animation
+var _sheetStyle = document.createElement('style');
+_sheetStyle.textContent = '@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }';
+document.head.appendChild(_sheetStyle);
 
 // ── Technical Page ─────────────────────────────────────────
 function renderTechnical(main) {
