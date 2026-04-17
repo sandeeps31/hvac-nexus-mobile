@@ -1,0 +1,368 @@
+/* ============================================================
+   HVAC NEXUS MOBILE — app.js
+   Routing, navigation, offline sync queue
+   ============================================================ */
+
+'use strict';
+
+// ── State ──────────────────────────────────────────────────
+var APP = {
+  currentPage: 'home',
+  pageHistory: [],
+  isOnline: navigator.onLine,
+  syncQueue: [],
+  currentProject: null,
+  currentUser: null
+};
+
+// ── Offline / Online Detection ─────────────────────────────
+window.addEventListener('online',  function() { APP.isOnline = true;  updateSyncIndicator(); processSyncQueue(); showSyncToast(); });
+window.addEventListener('offline', function() { APP.isOnline = false; updateSyncIndicator(); showOfflineToast(); });
+
+function updateSyncIndicator() {
+  var dot = document.getElementById('sync-indicator');
+  if (!dot) return;
+  dot.className = 'sync-dot ' + (APP.isOnline ? 'online' : 'offline');
+  dot.title = APP.isOnline ? 'Online' : 'Offline';
+}
+
+function showOfflineToast() {
+  var t = document.getElementById('offline-toast');
+  if (!t) return;
+  t.classList.remove('hidden');
+  setTimeout(function() { t.classList.add('hidden'); }, 4000);
+}
+
+function showSyncToast() {
+  if (APP.syncQueue.length === 0) return;
+  var t = document.getElementById('sync-toast');
+  if (!t) return;
+  t.classList.remove('hidden');
+  setTimeout(function() { t.classList.add('hidden'); }, 3000);
+}
+
+// ── Sync Queue ─────────────────────────────────────────────
+// Operations queued while offline are stored in localStorage
+// and replayed when connectivity returns.
+
+var SYNC_KEY = 'hvacnexus_mobile_syncqueue';
+
+function loadSyncQueue() {
+  try {
+    APP.syncQueue = JSON.parse(localStorage.getItem(SYNC_KEY) || '[]');
+  } catch(e) {
+    APP.syncQueue = [];
+  }
+}
+
+function saveSyncQueue() {
+  try {
+    localStorage.setItem(SYNC_KEY, JSON.stringify(APP.syncQueue));
+  } catch(e) {}
+}
+
+// Add an operation to the sync queue (called by modules when offline save occurs)
+function queueSync(operation) {
+  // operation: { table, action, data, id, timestamp }
+  operation.timestamp = Date.now();
+  APP.syncQueue.push(operation);
+  saveSyncQueue();
+}
+
+// Process all queued operations against Supabase
+async function processSyncQueue() {
+  if (!APP.isOnline || APP.syncQueue.length === 0) return;
+
+  var dot = document.getElementById('sync-indicator');
+  if (dot) { dot.className = 'sync-dot syncing'; dot.title = 'Syncing…'; }
+
+  var failed = [];
+
+  for (var i = 0; i < APP.syncQueue.length; i++) {
+    var op = APP.syncQueue[i];
+    try {
+      if (op.action === 'upsert') {
+        var res = await dbReady.then(function() {
+          return window._supabase.from(op.table).upsert(op.data);
+        });
+        if (res.error) throw res.error;
+      } else if (op.action === 'delete') {
+        var res2 = await dbReady.then(function() {
+          return window._supabase.from(op.table).delete().eq('id', op.id);
+        });
+        if (res2.error) throw res2.error;
+      }
+    } catch(e) {
+      console.warn('[SyncQueue] Failed op:', op, e);
+      failed.push(op);
+    }
+  }
+
+  APP.syncQueue = failed;
+  saveSyncQueue();
+
+  if (dot) {
+    dot.className = 'sync-dot online';
+    dot.title = 'Online';
+  }
+}
+
+// ── Navigation ─────────────────────────────────────────────
+var PAGE_CONFIG = {
+  home:         { title: 'HVAC Nexus', sub: '',            nav: 'home' },
+  technical:    { title: 'Technical',  sub: '',            nav: 'technical' },
+  quality:      { title: 'Quality',    sub: '',            nav: 'quality' },
+  commissioning:{ title: 'Commissioning', sub: '',         nav: 'commissioning' },
+  procurement:  { title: 'Procurement',sub: '',            nav: 'procurement' },
+  // Sub-pages
+  drawings:     { title: 'Drawings',   sub: 'Technical',   nav: 'technical' },
+  equipment:    { title: 'Equipment',  sub: 'Technical',   nav: 'technical' },
+  techsubs:     { title: 'Tech Submissions', sub: 'Technical', nav: 'technical' },
+  specs:        { title: 'Specifications', sub: 'Technical', nav: 'technical' },
+  itps:         { title: 'ITPs',       sub: 'Quality',     nav: 'quality' },
+  passivefire:  { title: 'Passive Fire', sub: 'Quality',   nav: 'quality' },
+  defects:      { title: 'Defects',    sub: 'Quality',     nav: 'quality' },
+  ncr:          { title: 'NCR',        sub: 'Quality',     nav: 'quality' },
+  precx:        { title: 'Pre-Cx Checklist', sub: 'Commissioning', nav: 'commissioning' },
+  cxtracker:    { title: 'Cx Tracker', sub: 'Commissioning', nav: 'commissioning' },
+  procschedule: { title: 'Procurement Schedule', sub: 'Procurement', nav: 'procurement' },
+  pos:          { title: 'Purchase Orders', sub: 'Procurement', nav: 'procurement' }
+};
+
+function appNav(page, params) {
+  params = params || {};
+
+  // Push to history
+  if (APP.currentPage !== page) {
+    APP.pageHistory.push(APP.currentPage);
+  }
+
+  APP.currentPage = page;
+
+  var cfg = PAGE_CONFIG[page] || { title: page, sub: '', nav: page };
+
+  // Update header
+  document.getElementById('header-main').textContent = cfg.title;
+  document.getElementById('header-sub').textContent = cfg.sub || (APP.currentProject ? APP.currentProject.name : '');
+
+  // Show/hide back button
+  var backBtn = document.getElementById('back-btn');
+  var isTopLevel = ['home','technical','quality','commissioning','procurement'].indexOf(page) !== -1;
+  backBtn.classList.toggle('hidden', isTopLevel || APP.pageHistory.length === 0);
+
+  // Update bottom nav active state
+  document.querySelectorAll('.nav-item').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.page === cfg.nav);
+  });
+
+  // Render page
+  renderPage(page, params);
+}
+
+function appGoBack() {
+  if (APP.pageHistory.length > 0) {
+    var prev = APP.pageHistory.pop();
+    // Don't push to history again
+    APP.currentPage = prev;
+    var cfg = PAGE_CONFIG[prev] || { title: prev, sub: '', nav: prev };
+    document.getElementById('header-main').textContent = cfg.title;
+    document.getElementById('header-sub').textContent = cfg.sub || (APP.currentProject ? APP.currentProject.name : '');
+    var isTopLevel = ['home','technical','quality','commissioning','procurement'].indexOf(prev) !== -1;
+    document.getElementById('back-btn').classList.toggle('hidden', isTopLevel || APP.pageHistory.length === 0);
+    document.querySelectorAll('.nav-item').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.page === cfg.nav);
+    });
+    renderPage(prev, {});
+  }
+}
+
+// ── Page Renderer ──────────────────────────────────────────
+function renderPage(page, params) {
+  var main = document.getElementById('app-main');
+  main.innerHTML = '<div class="spinner"></div>';
+
+  // Small delay so spinner shows on fast renders
+  setTimeout(function() {
+    switch(page) {
+      case 'home':         renderHome(main); break;
+      case 'technical':    renderTechnical(main); break;
+      case 'quality':      renderQuality(main); break;
+      case 'commissioning':renderCommissioning(main); break;
+      case 'procurement':  renderProcurement(main); break;
+      // Sub-pages (stubs — will be built per module)
+      default:
+        renderComingSoon(main, page);
+    }
+  }, 80);
+}
+
+// ── Home Page ──────────────────────────────────────────────
+function renderHome(main) {
+  var proj = APP.currentProject || { name: 'No Project Selected', code: '—' };
+  var user = APP.currentUser || { name: 'Guest' };
+  var hour = new Date().getHours();
+  var greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  main.innerHTML = '<div class="page">'
+    + '<div class="home-greeting">'
+    +   '<h1>' + greeting + ', ' + (user.name ? user.name.split(' ')[0] : 'there') + '</h1>'
+    +   '<p>' + new Date().toLocaleDateString('en-AU', {weekday:'long',day:'numeric',month:'long'}) + '</p>'
+    + '</div>'
+
+    + '<div class="project-banner">'
+    +   '<div class="project-banner-label">Active Project</div>'
+    +   '<div class="project-banner-name">' + proj.name + '</div>'
+    +   '<div class="project-banner-id">' + (proj.code || '') + '</div>'
+    + '</div>'
+
+    + '<div class="section-header"><span class="section-title">Quick Access</span></div>'
+
+    + '<div class="module-item" onclick="appNav(\'itps\')">'
+    +   '<div class="module-icon" style="background:rgba(34,197,94,0.15)">'
+    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'
+    +   '</div>'
+    +   '<span class="module-label">ITPs</span>'
+    +   '<span class="module-badge badge-edit">Edit</span>'
+    + '</div>'
+
+    + '<div class="module-item" onclick="appNav(\'defects\')">'
+    +   '<div class="module-icon" style="background:rgba(239,68,68,0.15)">'
+    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+    +   '</div>'
+    +   '<span class="module-label">Defects</span>'
+    +   '<span class="module-badge badge-edit">Edit</span>'
+    + '</div>'
+
+    + '<div class="module-item" onclick="appNav(\'precx\')">'
+    +   '<div class="module-icon" style="background:rgba(167,139,250,0.15)">'
+    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>'
+    +   '</div>'
+    +   '<span class="module-label">Pre-Cx Checklist</span>'
+    +   '<span class="module-badge badge-edit">Edit</span>'
+    + '</div>'
+
+    + '<div class="module-item" onclick="appNav(\'drawings\')">'
+    +   '<div class="module-icon" style="background:rgba(59,130,246,0.15)">'
+    +     '<svg viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+    +   '</div>'
+    +   '<span class="module-label">Drawings</span>'
+    +   '<span class="module-badge badge-edit">Edit</span>'
+    + '</div>'
+
+    + '</div>';
+}
+
+// ── Technical Page ─────────────────────────────────────────
+function renderTechnical(main) {
+  main.innerHTML = '<div class="page">'
+    + '<div class="section-header"><span class="section-title">Technical</span></div>'
+
+    + makeModuleItem('drawings',    '#60A5FA', 'rgba(59,130,246,0.15)',  drawingsIcon(),  'Drawings',           'Edit')
+    + makeModuleItem('equipment',   '#34D399', 'rgba(52,211,153,0.15)',  equipIcon(),     'Equipment Schedules','View')
+    + makeModuleItem('techsubs',    '#FBBF24', 'rgba(251,191,36,0.15)',  techsubsIcon(),  'Tech Submissions',   'View')
+    + makeModuleItem('specs',       '#F472B6', 'rgba(244,114,182,0.15)', specsIcon(),     'Specifications',     'View')
+
+    + '</div>';
+}
+
+// ── Quality Page ───────────────────────────────────────────
+function renderQuality(main) {
+  main.innerHTML = '<div class="page">'
+    + '<div class="section-header"><span class="section-title">Quality</span></div>'
+
+    + makeModuleItem('itps',        '#4ADE80', 'rgba(34,197,94,0.15)',   itpsIcon(),      'ITPs',               'Edit')
+    + makeModuleItem('defects',     '#F87171', 'rgba(239,68,68,0.15)',   defectsIcon(),   'Defects',            'Edit')
+    + makeModuleItem('passivefire', '#FB923C', 'rgba(251,146,60,0.15)',  pfireIcon(),     'Passive Fire',       'View')
+    + makeModuleItem('ncr',         '#E879F9', 'rgba(232,121,249,0.15)', ncrIcon(),       'NCR',                'View')
+
+    + '</div>';
+}
+
+// ── Commissioning Page ─────────────────────────────────────
+function renderCommissioning(main) {
+  main.innerHTML = '<div class="page">'
+    + '<div class="section-header"><span class="section-title">Commissioning</span></div>'
+
+    + makeModuleItem('precx',       '#A78BFA', 'rgba(167,139,250,0.15)', precxIcon(),     'Pre-Cx Checklist',   'Edit')
+    + makeModuleItem('cxtracker',   '#38BDF8', 'rgba(56,189,248,0.15)',  cxtrackerIcon(), 'Commissioning Tracker','Edit')
+
+    + '</div>';
+}
+
+// ── Procurement Page ───────────────────────────────────────
+function renderProcurement(main) {
+  main.innerHTML = '<div class="page">'
+    + '<div class="section-header"><span class="section-title">Procurement</span></div>'
+
+    + makeModuleItem('procschedule','#FBBF24', 'rgba(251,191,36,0.15)',  procIcon(),      'Procurement Schedule','View')
+    + makeModuleItem('pos',         '#60A5FA', 'rgba(59,130,246,0.15)',  posIcon(),       'Purchase Orders',    'View')
+
+    + '</div>';
+}
+
+// ── Coming Soon Stub ───────────────────────────────────────
+function renderComingSoon(main, page) {
+  main.innerHTML = '<div class="page">'
+    + '<div class="empty-state">'
+    +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+    +   '<p>This module is coming soon.<br>Check back in a future update.</p>'
+    + '</div>'
+    + '</div>';
+}
+
+// ── Module Item Helper ─────────────────────────────────────
+function makeModuleItem(page, iconColor, iconBg, iconSvg, label, mode) {
+  var badgeClass = mode === 'Edit' ? 'badge-edit' : 'badge-view';
+  return '<div class="module-item" onclick="appNav(\'' + page + '\')">'
+    + '<div class="module-icon" style="background:' + iconBg + '">'
+    +   '<svg viewBox="0 0 24 24" fill="none" stroke="' + iconColor + '" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + iconSvg + '</svg>'
+    + '</div>'
+    + '<span class="module-label">' + label + '</span>'
+    + '<span class="module-badge ' + badgeClass + '">' + mode + '</span>'
+    + '<svg class="card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'
+    + '</div>';
+}
+
+// ── SVG Icon Helpers ───────────────────────────────────────
+function drawingsIcon()   { return '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'; }
+function equipIcon()      { return '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'; }
+function techsubsIcon()   { return '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'; }
+function specsIcon()      { return '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'; }
+function itpsIcon()       { return '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'; }
+function defectsIcon()    { return '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'; }
+function pfireIcon()      { return '<path d="M12 2c0 6-8 8-8 14a8 8 0 0 0 16 0c0-6-8-8-8-14z"/><path d="M12 12c0 3-3 4-3 7a3 3 0 0 0 6 0c0-3-3-4-3-7z"/>'; }
+function ncrIcon()        { return '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'; }
+function precxIcon()      { return '<circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/>'; }
+function cxtrackerIcon()  { return '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'; }
+function procIcon()       { return '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'; }
+function posIcon()        { return '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>'; }
+
+// ── Session / Project ──────────────────────────────────────
+function loadSession() {
+  try {
+    var proj = localStorage.getItem('hvacnexus_current_project');
+    if (proj) APP.currentProject = JSON.parse(proj);
+    var user = localStorage.getItem('hvacnexus_current_user');
+    if (user) APP.currentUser = JSON.parse(user);
+  } catch(e) {}
+}
+
+// ── Service Worker Registration ────────────────────────────
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(function(reg) {
+      console.log('[SW] Registered:', reg.scope);
+    }).catch(function(err) {
+      console.warn('[SW] Registration failed:', err);
+    });
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  loadSession();
+  loadSyncQueue();
+  updateSyncIndicator();
+  registerSW();
+  appNav('home');
+});
