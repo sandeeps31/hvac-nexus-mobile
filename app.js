@@ -210,10 +210,14 @@ async function renderHome(main) {
     if (companyId) {
       var res = await window._supabase
         .from('projects')
-        .select('id, name, code')
+        .select('data')
         .eq('company_id', companyId)
-        .order('created_at', { ascending: false });
-      if (res.data) projects = res.data;
+        .single();
+      if (res.data && Array.isArray(res.data.data)) {
+        projects = res.data.data.map(function(p) {
+          return { id: p.id, name: p.name, code: p.num || p.code || '' };
+        });
+      }
     }
   } catch(e) {
     console.warn('[Home] Failed to load projects:', e);
