@@ -371,7 +371,13 @@ function _loadPdf(url){
 }
 
 function _renderPdf(url){
-  pdfjsLib.getDocument(url).promise.then(function(doc){return doc.getPage(1);}).then(function(page){
+  var loadingTask = pdfjsLib.getDocument({
+    url: url,
+    withCredentials: false,
+    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+    cMapPacked: true
+  });
+  loadingTask.promise.then(function(doc){return doc.getPage(1);}).then(function(page){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
     var vp0=page.getViewport({scale:1});
