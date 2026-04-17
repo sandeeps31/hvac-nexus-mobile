@@ -377,17 +377,16 @@ function _renderPdf(url){
     cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
     cMapPacked: true
   });
-  loadingTask.promise.then(function(doc){return doc.getPage(1);}).then(function(page){
+  loadingTask.promise.then(function(doc){
+    return doc.getPage(1);
+  }).then(function(page){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
     var vp0=page.getViewport({scale:1});
-    // Render at high resolution — 3x base scale for sharp PDF on retina
     var RENDER_SCALE = 3;
     var vp=page.getViewport({scale:RENDER_SCALE});
     var c=document.getElementById('dwg-cvs');
-    // Physical canvas = full high-res render
     c.width=vp.width; c.height=vp.height;
-    // CSS display size = fit to screen
     var fitW=w.clientWidth*0.95;
     var fitH=w.clientHeight*0.95;
     var fitScale=Math.min(fitW/vp.width, fitH/vp.height);
@@ -401,9 +400,15 @@ function _renderPdf(url){
     _at();
     page.render({canvasContext:c.getContext('2d'),viewport:vp});
     _rp();
-  }).catch(function(){
-    document.getElementById('dwg-empty').style.display='flex';
-    document.getElementById('dwg-cvs').style.display='none';
+  }).catch(function(err){
+    console.error('[PDF] error:', err);
+    var empty = document.getElementById('dwg-empty');
+    var c = document.getElementById('dwg-cvs');
+    if(empty) {
+      empty.style.display='flex';
+      empty.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p style="font-size:13px;text-align:center;padding:0 20px">Could not load PDF.<br><span style="font-size:11px;opacity:0.6">'+(err&&err.message?err.message:'Unknown error')+'</span></p>';
+    }
+    if(c) c.style.display='none';
   });
 }
 
