@@ -135,7 +135,8 @@ if (!document.getElementById('dwg-viewer-overlay')) {
   wrap.addEventListener('click', function(e){
     if(_t==='pan') return;
     var r=wrap.getBoundingClientRect(), c=document.getElementById('dwg-cvs');
-    _pc={x:(e.clientX-r.left-_tx)/(_sc*c.width), y:(e.clientY-r.top-_ty)/(_sc*c.height)};
+    var cw=c.offsetWidth||c.width, ch=c.offsetHeight||c.height;
+    _pc={x:(e.clientX-r.left-_tx)/(_sc*cw), y:(e.clientY-r.top-_ty)/(_sc*ch)};
     _openPinModal(_t);
   });
   wrap.addEventListener('touchstart', function(e){
@@ -158,7 +159,8 @@ if (!document.getElementById('dwg-viewer-overlay')) {
       var t=e.changedTouches[0];
       if(Math.abs(t.clientX-_lx)<8&&Math.abs(t.clientY-_ly)<8){
         var r=wrap.getBoundingClientRect(),c=document.getElementById('dwg-cvs');
-        _pc={x:(t.clientX-r.left-_tx)/(_sc*c.width),y:(t.clientY-r.top-_ty)/(_sc*c.height)};
+        var cw=c.offsetWidth||c.width,ch=c.offsetHeight||c.height;
+        _pc={x:(t.clientX-r.left-_tx)/(_sc*cw),y:(t.clientY-r.top-_ty)/(_sc*ch)};
         _openPinModal(_t);
       }
     }
@@ -182,12 +184,15 @@ function _at(){
 function _rp(){
   var layer=document.getElementById('dwg-pins'), c=document.getElementById('dwg-cvs');
   if(!layer||!c||!_cur) return;
-  layer.style.width=c.width+'px'; layer.style.height=c.height+'px';
+  // Use CSS (logical) size for pin positioning, not physical canvas size
+  var cw=c.offsetWidth||c.width, ch=c.offsetHeight||c.height;
+  layer.style.width=cw+'px'; layer.style.height=ch+'px';
   layer.innerHTML='';
+  var cw2=c.offsetWidth||c.width, ch2=c.offsetHeight||c.height;
   (_cur.pins||[]).forEach(function(pin){
     var el=document.createElement('div');
     el.className='pm pm-'+pin.type;
-    el.style.left=(pin.x*c.width)+'px'; el.style.top=(pin.y*c.height)+'px';
+    el.style.left=(pin.x*cw2)+'px'; el.style.top=(pin.y*ch2)+'px';
     el.innerHTML='<span>'+(pin.ref||'')+'</span>';
     el.onclick=function(e){e.stopPropagation();_showPinDet(pin);};
     layer.appendChild(el);
@@ -369,12 +374,22 @@ function _renderPdf(url){
   pdfjsLib.getDocument(url).promise.then(function(doc){return doc.getPage(1);}).then(function(page){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
+    var dpr=window.devicePixelRatio||2;
     var vp0=page.getViewport({scale:1});
+    // Fit to screen at 1x, then render at dpr for retina sharpness
     var fit=Math.min(w.clientWidth/vp0.width,w.clientHeight/vp0.height)*0.95;
-    var vp=page.getViewport({scale:fit});
+    var renderScale=fit*dpr;
+    var vp=page.getViewport({scale:renderScale});
     var c=document.getElementById('dwg-cvs');
+    // Canvas physical size = rendered size (high res)
     c.width=vp.width; c.height=vp.height;
-    _sc=1; _tx=(w.clientWidth-vp.width)/2; _ty=(w.clientHeight-vp.height)/2; _at();
+    // CSS size = logical fit size (so it displays at fit scale)
+    c.style.width=(vp.width/dpr)+'px';
+    c.style.height=(vp.height/dpr)+'px';
+    _sc=1;
+    _tx=(w.clientWidth-(vp.width/dpr))/2;
+    _ty=(w.clientHeight-(vp.height/dpr))/2;
+    _at();
     page.render({canvasContext:c.getContext('2d'),viewport:vp});
     _rp();
   }).catch(function(){
@@ -413,7 +428,8 @@ document.getElementById('vwr-back').onclick = function(){
 document.getElementById('vwr-fit').onclick = function(){
   if(!_pdfPage) return;
   var w=document.getElementById('dwg-wrap'),c=document.getElementById('dwg-cvs');
-  _sc=1; _tx=(w.clientWidth-c.width)/2; _ty=(w.clientHeight-c.height)/2; _at();
+  var cw=c.offsetWidth||c.width, ch=c.offsetHeight||c.height;
+  _sc=1; _tx=(w.clientWidth-cw)/2; _ty=(w.clientHeight-ch)/2; _at();
 };
 document.getElementById('pin-save').onclick = function(){ window.dwgSavePin(); };
 document.getElementById('pin-cancel').onclick = function(){ document.getElementById('pin-add-ov').style.display='none'; _pc=null; };
