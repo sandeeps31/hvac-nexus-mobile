@@ -217,12 +217,15 @@ async function renderHome(main) {
       var res = await window._supabase
         .from('projects')
         .select('data')
-        .eq('company_id', companyId)
-        .single();
-      if (res.data && Array.isArray(res.data.data)) {
-        projects = res.data.data.map(function(p) {
-          return { id: p.id, name: p.name, code: p.num || p.code || '' };
-        });
+        .eq('company_id', companyId);
+      if (res.data && res.data.length > 0) {
+        // Find the row with project_num === '__projects__'
+        var row = res.data.find(function(r) { return r.data && Array.isArray(r.data); });
+        if (row) {
+          projects = row.data.map(function(p) {
+            return { id: p.id, name: p.name, code: p.num || p.code || '' };
+          });
+        }
       } else {
         console.warn('[Home] projects query error:', res.error);
       }
