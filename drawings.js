@@ -91,6 +91,7 @@ if (!document.getElementById('dwg-vwr')) {
     '<div class="vhdr">'
     + '<button class="vbtn" id="dvwr-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></button>'
     + '<div class="vtitle"><div class="t1" id="dvwr-num">—</div><div class="t2" id="dvwr-name">—</div></div>'
+    + '<button class="vbtn" id="dvwr-fit" title="Fit to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>'
     + '</div>'
     + '<div id="dwg-wrap">'
     +   '<iframe id="dwg-frm" allowfullscreen></iframe>'
@@ -123,6 +124,16 @@ if (!document.getElementById('dwg-vwr')) {
   pd.id = 'dpd-ov';
   pd.innerHTML = '<div class="dpd-sht" id="dpd-body"></div>';
   document.body.appendChild(pd);
+
+  // Wire fit button
+  document.getElementById('dvwr-fit').addEventListener('click', function() {
+    var frm = document.getElementById('dwg-frm');
+    if (!frm || !frm.src) return;
+    // Reload iframe to reset zoom to fit
+    var src = frm.src;
+    frm.src = '';
+    setTimeout(function(){ frm.src = src; }, 50);
+  });
 
   // Wire toolbar buttons
   document.querySelectorAll('.vtbtn').forEach(function(btn) {
@@ -207,15 +218,19 @@ window.renderDrawingsPage = async function(container) {
   container.innerHTML = '<div class="page"><div class="spinner"></div></div>';
   _drawings = await _load();
 
-  // Group: discipline > area
+  // Group: cat (discipline) > subcat > area (3 levels)
+  // Desktop uses: cat = discipline, subcat = subcategory, area = area
   var groups = {};
   _drawings.forEach(function(d) {
     if (d.obsolete) return;
-    var disc = d.discipline || 'Uncategorised';
-    var area = d.area || d.subcat || '';
+    var disc = d.cat || d.discipline || 'Uncategorised';
+    var subcat = d.subcat || '';
+    var area = d.area || '';
     if (!groups[disc]) groups[disc] = { _n: 0 };
-    if (!groups[disc][area]) groups[disc][area] = [];
-    groups[disc][area].push(d);
+    if (!groups[disc][subcat]) groups[disc][subcat] = { _areas: {}, _n: 0 };
+    if (!groups[disc][subcat]._areas[area]) groups[disc][subcat]._areas[area] = [];
+    groups[disc][subcat]._areas[area].push(d);
+    groups[disc][subcat]._n++;
     groups[disc]._n++;
   });
   var discKeys = Object.keys(groups);
@@ -241,8 +256,8 @@ window.renderDrawingsPage = async function(container) {
       var id = 'dg' + i;
       var total = groups[disc]._n;
       var exp = i === 0;
-      var areaKeys = Object.keys(groups[disc]).filter(function(k) { return k !== '_n'; });
-      var multiArea = areaKeys.length > 1 || (areaKeys.length === 1 && areaKeys[0] !== '');
+      var subcatKeys = Object.keys(groups[disc]).filter(function(k) { return k !== '_n'; });
+      var multiSubcat = subcatKeys.length > 1 || (subcatKeys.length === 1 && subcatKeys[0] !== '');
 
       html += '<div class="disc-group" data-disc="' + disc + '">';
       html += '<div class="disc-hdr' + (exp ? ' open' : '') + '" onclick="dwgToggle(\'' + id + '\')" id="' + id + 'h">';
@@ -250,22 +265,34 @@ window.renderDrawingsPage = async function(container) {
       html += '<svg class="disc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
       html += '</div><div class="disc-body' + (exp ? ' open' : '') + '" id="' + id + 'b">';
 
-      areaKeys.forEach(function(area) {
-        if (multiArea && area) {
-          html += '<div style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.8px;background:var(--bg-elevated);border-bottom:1px solid var(--border)">' + area + '</div>';
+      subcatKeys.forEach(function(subcat) {
+        var subcatData = groups[disc][subcat];
+        var areaKeys = Object.keys(subcatData._areas);
+        var multiArea = areaKeys.length > 1 || (areaKeys.length === 1 && areaKeys[0] !== '');
+
+        if (multiSubcat && subcat) {
+          html += '<div style="padding:8px 14px 4px;font-size:12px;font-weight:700;color:var(--text-primary);background:var(--bg-elevated);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+            + '<span>' + subcat + '</span>'
+            + '<span style="font-size:11px;color:var(--accent);background:var(--accent-dim);padding:2px 8px;border-radius:20px;font-weight:600">' + subcatData._n + '</span>'
+            + '</div>';
         }
-        groups[disc][area].forEach(function(d) {
-          var sc = { IFR:'st-ifr', IFA:'st-ifa', IFC:'st-ifc', 'As-Builts':'st-ab', AB:'st-ab' }[d.status] || 'st-ifr';
-          var pins = (d.pins || []).length;
-          html += '<div class="dwg-row" data-id="' + d.id + '" onclick="dwgOpen(this.dataset.id)">';
-          html += '<div class="dwg-num">' + (d.num || '—') + '</div>';
-          html += '<div class="dwg-info">';
-          html += '<div class="dwg-name">' + (d.name || d.title || 'Untitled') + '</div>';
-          html += '<div class="dwg-meta"><span>Rev ' + (d.rev || '—') + '</span>';
-          if (pins > 0) html += '<span>📍 ' + pins + '</span>';
-          html += '</div></div>';
-          html += '<span class="dwg-st ' + sc + '">' + (d.status || '—') + '</span>';
-          html += '</div>';
+
+        areaKeys.forEach(function(area) {
+          if (multiArea && area) {
+            html += '<div style="padding:5px 14px;font-size:11px;font-weight:600;color:var(--text-secondary);background:var(--bg-card);border-bottom:1px solid var(--border)">' + area + '</div>';
+          }
+          subcatData._areas[area].forEach(function(d) {
+            var sc = { IFR:'st-ifr', IFA:'st-ifa', IFC:'st-ifc', 'As-Builts':'st-ab', AB:'st-ab' }[d.status] || 'st-ifr';
+            var pins = (d.pins || []).length;
+            html += '<div class="dwg-row" data-id="' + d.id + '" onclick="dwgOpen(this.dataset.id)">';
+            html += '<div class="dwg-num">' + (d.num || '\u2014') + '</div>';
+            html += '<div class="dwg-info"><div class="dwg-name">' + (d.name || d.title || 'Untitled') + '</div>';
+            html += '<div class="dwg-meta"><span>Rev ' + (d.rev || '\u2014') + '</span>';
+            if (pins > 0) html += '<span>\uD83D\uDCCD ' + pins + '</span>';
+            html += '</div></div>';
+            html += '<span class="dwg-st ' + sc + '">' + (d.status || '\u2014') + '</span>';
+            html += '</div>';
+          });
         });
       });
       html += '</div></div>';
