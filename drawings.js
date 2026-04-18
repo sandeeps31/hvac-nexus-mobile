@@ -396,33 +396,38 @@ function _renderPdf(url){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
     var vp0=page.getViewport({scale:1});
-    // Fit scale to screen
+
+    // Step 1: work out fit scale so drawing fills screen at 1x
     var fit=Math.min(w.clientWidth/vp0.width, w.clientHeight/vp0.height)*0.95;
-    // iOS Safari canvas max dimension is ~4096px — cap render scale to stay under
-    var dpr=Math.min(window.devicePixelRatio||1, 2);
-    var renderScale=fit*dpr;
-    // Ensure canvas dimensions won't exceed 4096px on either side
-    var testVp=page.getViewport({scale:renderScale});
-    if(testVp.width>4000||testVp.height>4000){
-      renderScale=renderScale*(4000/Math.max(testVp.width,testVp.height));
+
+    // Step 2: render at 2x fit for sharpness, but cap so neither
+    // canvas dimension exceeds 3500px (safe iOS Safari limit)
+    var renderScale=fit*2;
+    var testW=vp0.width*renderScale, testH=vp0.height*renderScale;
+    if(testW>3500||testH>3500){
+      renderScale=renderScale*(3500/Math.max(testW,testH));
     }
+
     var vp=page.getViewport({scale:renderScale});
     var c=document.getElementById('dwg-cvs');
-    // Physical canvas size
+
+    // Canvas physical pixels = rendered resolution
     c.width=Math.floor(vp.width);
     c.height=Math.floor(vp.height);
-    // CSS display size = fit to screen
-    var cssW=vp.width/dpr;
-    var cssH=vp.height/dpr;
+
+    // CSS size = fit scale (half of render scale = 1x display)
+    // This means each rendered pixel maps to 0.5 CSS px = sharp on retina
+    var cssW=vp.width/2;
+    var cssH=vp.height/2;
     c.style.width=cssW+'px';
     c.style.height=cssH+'px';
+
     _sc=1;
     _tx=(w.clientWidth-cssW)/2;
     _ty=(w.clientHeight-cssH)/2;
     _at();
-    var renderCtx={canvasContext:c.getContext('2d'),viewport:vp};
-    page.render(renderCtx).promise.then(function(){
-      // Hide loading indicator, show canvas
+
+    page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
       var empty=document.getElementById('dwg-empty');
       if(empty) empty.style.display='none';
       c.style.display='block';
