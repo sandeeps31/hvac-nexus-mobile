@@ -320,8 +320,8 @@ window.dwgOpen=function(id){
   document.getElementById('dwg-viewer-overlay').classList.add('open');
   dwgTool('pan');
   if(d.pdfUrl){
-    document.getElementById('dwg-empty').style.display='none';
-    document.getElementById('dwg-cvs').style.display='block';
+    document.getElementById('dwg-empty').style.display='flex';
+    document.getElementById('dwg-cvs').style.display='none';
     _loadPdf(d.pdfUrl);
   } else {
     document.getElementById('dwg-cvs').style.display='none';
@@ -421,7 +421,13 @@ function _renderPdf(url){
     _ty=(w.clientHeight-cssH)/2;
     _at();
     var renderCtx={canvasContext:c.getContext('2d'),viewport:vp};
-    page.render(renderCtx).promise.then(function(){ _rp(); });
+    page.render(renderCtx).promise.then(function(){
+      // Hide loading indicator, show canvas
+      var empty=document.getElementById('dwg-empty');
+      if(empty) empty.style.display='none';
+      c.style.display='block';
+      _rp();
+    });
   }).catch(function(err){
     console.error('[PDF] error:', err);
     var empty = document.getElementById('dwg-empty');
