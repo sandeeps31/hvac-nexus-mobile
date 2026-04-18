@@ -359,12 +359,25 @@ function dwgFit(){
 }
 
 function _loadPdf(url){
+  // Show loading indicator
+  var empty=document.getElementById('dwg-empty');
+  if(empty){
+    empty.style.display='flex';
+    empty.innerHTML='<div style="width:32px;height:32px;border:2px solid rgba(255,255,255,0.2);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;margin-bottom:12px"></div><p style="font-size:13px">Loading PDF…</p>';
+  }
   if(!_pdfLoaded){
+    // Try unpkg as fallback — more reliable on iOS Safari PWA
+    var src='https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
     var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.src=src;
     s.onload=function(){
-      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      _pdfLoaded=true; _renderPdf(url);
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+      _pdfLoaded=true;
+      _renderPdf(url);
+    };
+    s.onerror=function(){
+      var empty=document.getElementById('dwg-empty');
+      if(empty){empty.style.display='flex';empty.innerHTML='<p style="font-size:13px;text-align:center;padding:0 20px;color:rgba(255,255,255,0.5)">Failed to load PDF viewer.<br>Check your internet connection.</p>';}
     };
     document.head.appendChild(s);
   } else { _renderPdf(url); }
@@ -383,23 +396,32 @@ function _renderPdf(url){
     _pdfPage=page;
     var w=document.getElementById('dwg-wrap');
     var vp0=page.getViewport({scale:1});
-    var RENDER_SCALE = 3;
-    var vp=page.getViewport({scale:RENDER_SCALE});
+    // Fit scale to screen
+    var fit=Math.min(w.clientWidth/vp0.width, w.clientHeight/vp0.height)*0.95;
+    // iOS Safari canvas max dimension is ~4096px — cap render scale to stay under
+    var dpr=Math.min(window.devicePixelRatio||1, 2);
+    var renderScale=fit*dpr;
+    // Ensure canvas dimensions won't exceed 4096px on either side
+    var testVp=page.getViewport({scale:renderScale});
+    if(testVp.width>4000||testVp.height>4000){
+      renderScale=renderScale*(4000/Math.max(testVp.width,testVp.height));
+    }
+    var vp=page.getViewport({scale:renderScale});
     var c=document.getElementById('dwg-cvs');
-    c.width=vp.width; c.height=vp.height;
-    var fitW=w.clientWidth*0.95;
-    var fitH=w.clientHeight*0.95;
-    var fitScale=Math.min(fitW/vp.width, fitH/vp.height);
-    var cssW=vp.width*fitScale;
-    var cssH=vp.height*fitScale;
+    // Physical canvas size
+    c.width=Math.floor(vp.width);
+    c.height=Math.floor(vp.height);
+    // CSS display size = fit to screen
+    var cssW=vp.width/dpr;
+    var cssH=vp.height/dpr;
     c.style.width=cssW+'px';
     c.style.height=cssH+'px';
     _sc=1;
     _tx=(w.clientWidth-cssW)/2;
     _ty=(w.clientHeight-cssH)/2;
     _at();
-    page.render({canvasContext:c.getContext('2d'),viewport:vp});
-    _rp();
+    var renderCtx={canvasContext:c.getContext('2d'),viewport:vp};
+    page.render(renderCtx).promise.then(function(){ _rp(); });
   }).catch(function(err){
     console.error('[PDF] error:', err);
     var empty = document.getElementById('dwg-empty');
