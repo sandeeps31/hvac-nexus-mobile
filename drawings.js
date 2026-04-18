@@ -179,6 +179,35 @@ function _at(){
   var c=document.getElementById('dwg-cvs'), p=document.getElementById('dwg-pins');
   if(c) c.style.transform=t;
   if(p) p.style.transform=t;
+  // Trigger hi-res re-render when zoomed in significantly
+  if(_pdfPage && _sc > 1.5) {
+    clearTimeout(_reRenderTimer);
+    _reRenderTimer = setTimeout(function(){ _reRenderAtScale(_sc); }, 400);
+  }
+}
+
+function _reRenderAtScale(userScale){
+  if(!_pdfPage) return;
+  var w=document.getElementById('dwg-wrap');
+  var vp0=_pdfPage.getViewport({scale:1});
+  // Render at current zoom level * 2 for sharpness
+  var targetScale=_baseFit*userScale*2;
+  // Cap at 4000px
+  var testW=vp0.width*targetScale, testH=vp0.height*targetScale;
+  if(testW>4000||testH>4000){
+    targetScale=targetScale*(4000/Math.max(testW,testH));
+  }
+  // Don't re-render if scale hasn't changed much
+  if(Math.abs(targetScale-_baseScale)<0.3) return;
+  var vp=_pdfPage.getViewport({scale:targetScale});
+  var c=document.getElementById('dwg-cvs');
+  c.width=Math.floor(vp.width);
+  c.height=Math.floor(vp.height);
+  // Keep CSS size the same (transform handles zoom)
+  _pdfPage.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
+    _baseScale=targetScale;
+    _rp();
+  });
 }
 
 function _rp(){
@@ -397,40 +426,42 @@ function _renderPdf(url){
     var w=document.getElementById('dwg-wrap');
     var vp0=page.getViewport({scale:1});
 
-    // Step 1: work out fit scale so drawing fills screen at 1x
-    var fit=Math.min(w.clientWidth/vp0.width, w.clientHeight/vp0.height)*0.95;
+    // Fit the whole drawing to the screen
+    var fit=Math.min(w.clientWidth/vp0.width, w.clientHeight/vp0.height)*0.92;
 
-    // Step 2: render at 2x fit for sharpness, but cap so neither
-    // canvas dimension exceeds 3500px (safe iOS Safari limit)
+    // Render at 2x for sharpness, capped at 3000px for iOS Safari
     var renderScale=fit*2;
     var testW=vp0.width*renderScale, testH=vp0.height*renderScale;
-    if(testW>3500||testH>3500){
-      renderScale=renderScale*(3500/Math.max(testW,testH));
+    if(testW>3000||testH>3000){
+      renderScale=renderScale*(3000/Math.max(testW,testH));
     }
 
     var vp=page.getViewport({scale:renderScale});
     var c=document.getElementById('dwg-cvs');
 
-    // Canvas physical pixels = rendered resolution
+    // Physical canvas = high res render
     c.width=Math.floor(vp.width);
     c.height=Math.floor(vp.height);
 
-    // CSS size = fit scale (half of render scale = 1x display)
-    // This means each rendered pixel maps to 0.5 CSS px = sharp on retina
-    var cssW=vp.width/2;
-    var cssH=vp.height/2;
+    // CSS display size = exactly fit to screen (renderScale/2 = fit*1x)
+    // Remove any previous inline size
+    var cssW=Math.floor(vp0.width*fit);
+    var cssH=Math.floor(vp0.height*fit);
     c.style.width=cssW+'px';
     c.style.height=cssH+'px';
+    c.style.imageRendering='crisp-edges';
 
     _sc=1;
-    _tx=(w.clientWidth-cssW)/2;
-    _ty=(w.clientHeight-cssH)/2;
+    _tx=Math.floor((w.clientWidth-cssW)/2);
+    _ty=Math.floor((w.clientHeight-cssH)/2);
     _at();
 
     page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
       var empty=document.getElementById('dwg-empty');
       if(empty) empty.style.display='none';
       c.style.display='block';
+      _baseScale=renderScale;
+      _baseFit=fit;
       _rp();
     });
   }).catch(function(err){
@@ -475,8 +506,9 @@ document.getElementById('vwr-back').onclick = function(){
 document.getElementById('vwr-fit').onclick = function(){
   if(!_pdfPage) return;
   var w=document.getElementById('dwg-wrap'),c=document.getElementById('dwg-cvs');
-  var cw=c.offsetWidth||c.width, ch=c.offsetHeight||c.height;
-  _sc=1; _tx=(w.clientWidth-cw)/2; _ty=(w.clientHeight-ch)/2; _at();
+  var cw=parseInt(c.style.width)||c.offsetWidth;
+  var ch=parseInt(c.style.height)||c.offsetHeight;
+  _sc=1; _tx=Math.floor((w.clientWidth-cw)/2); _ty=Math.floor((w.clientHeight-ch)/2); _at();
 };
 document.getElementById('pin-save').onclick = function(){ window.dwgSavePin(); };
 document.getElementById('pin-cancel').onclick = function(){ document.getElementById('pin-add-ov').style.display='none'; _pc=null; };
