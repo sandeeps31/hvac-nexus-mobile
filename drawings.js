@@ -208,7 +208,7 @@ function _reRenderAtScale(userScale){
   c.height=Math.floor(vp.height);
   c.style.width=curCssW+'px';
   c.style.height=curCssH+'px';
-  _pdfPage.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
+  _pdfPage.render({canvasContext:c.getContext('2d'),viewport:vp,intent:'print'}).promise.then(function(){
     _baseScale=targetScale;
     _rp();
   });
@@ -492,7 +492,7 @@ function _renderPdf(url){
     _ty=Math.floor((w.clientHeight-cssH)/2);
     _at();
 
-    page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
+    page.render({canvasContext:c.getContext('2d'),viewport:vp,intent:'print'}).promise.then(function(){
       var empty=document.getElementById('dwg-empty');
       if(empty) empty.style.display='none';
       c.style.display='block';
