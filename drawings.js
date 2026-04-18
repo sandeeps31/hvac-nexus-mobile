@@ -190,20 +190,24 @@ function _reRenderAtScale(userScale){
   if(!_pdfPage) return;
   var w=document.getElementById('dwg-wrap');
   var vp0=_pdfPage.getViewport({scale:1});
-  // Render at current zoom level * 2 for sharpness
+  // Target: render at fit*zoom*2 for sharpness
   var targetScale=_baseFit*userScale*2;
-  // Cap at 4000px
+  // Cap safely for iOS
   var testW=vp0.width*targetScale, testH=vp0.height*targetScale;
-  if(testW>4000||testH>4000){
-    targetScale=targetScale*(4000/Math.max(testW,testH));
+  if(testW>3800||testH>3800){
+    targetScale=targetScale*(3800/Math.max(testW,testH));
   }
-  // Don't re-render if scale hasn't changed much
-  if(Math.abs(targetScale-_baseScale)<0.3) return;
+  // Skip if already at this resolution
+  if(Math.abs(targetScale-_baseScale)/Math.max(_baseScale,0.1)<0.2) return;
   var vp=_pdfPage.getViewport({scale:targetScale});
   var c=document.getElementById('dwg-cvs');
+  // Store current CSS size — keep it the same, transform handles visual zoom
+  var curCssW=parseInt(c.style.width)||c.offsetWidth;
+  var curCssH=parseInt(c.style.height)||c.offsetHeight;
   c.width=Math.floor(vp.width);
   c.height=Math.floor(vp.height);
-  // Keep CSS size the same (transform handles zoom)
+  c.style.width=curCssW+'px';
+  c.style.height=curCssH+'px';
   _pdfPage.render({canvasContext:c.getContext('2d'),viewport:vp}).promise.then(function(){
     _baseScale=targetScale;
     _rp();
@@ -291,41 +295,72 @@ window.renderDrawingsPage = async function(container){
   container.innerHTML='<div class="page"><div class="spinner"></div></div>';
   _drawings=await _loadDrawings();
 
+  // Group by discipline > area
   var groups={};
   _drawings.forEach(function(d){
     if(d.obsolete) return;
-    var g=d.discipline||'Uncategorised';
-    if(!groups[g]) groups[g]=[];
-    groups[g].push(d);
+    var disc=d.discipline||'Uncategorised';
+    var area=d.area||d.subcat||'';
+    if(!groups[disc]) groups[disc]={_total:0};
+    if(!groups[disc][area]) groups[disc][area]=[];
+    groups[disc][area].push(d);
+    groups[disc]._total++;
   });
-  var keys=Object.keys(groups);
+  var discKeys=Object.keys(groups);
 
+  var Q='"';
   var html='<div class="page">';
-  html+='<div class="dwg-search-bar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input class="dwg-search-input" id="dwg-sq" placeholder="Search drawings…" oninput="dwgSearch()" type="search"></div>';
-  html+='<div class="filter-row" id="dwg-fp"><button class="pill-tab active" onclick="dwgFilt(\'\')" data-disc="">All</button>';
-  keys.forEach(function(k){html+='<button class="pill-tab" onclick="dwgFilt(\''+k+'\')" data-disc="'+k+'">'+k+'</button>';});
+  html+='<div class="dwg-search-bar">';
+  html+='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">';
+  html+='<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+  html+='<input class="dwg-search-input" id="dwg-sq" placeholder="Search drawings..." oninput="dwgSearch()" type="search"></div>';
+
+  html+='<div class="filter-row" id="dwg-fp">';
+  html+='<button class="pill-tab active" data-disc="" onclick="dwgFilt(this.dataset.disc)">All</button>';
+  discKeys.forEach(function(k){
+    html+='<button class="pill-tab" data-disc="'+k+'" onclick="dwgFilt(this.dataset.disc)">'+k+'</button>';
+  });
   html+='</div><div id="dwg-lst">';
 
-  if(keys.length===0){
-    html+='<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><p>No drawings found.<br>Add drawings in the desktop app.</p></div>';
+  if(discKeys.length===0){
+    html+='<div class="empty-state">';
+    html+='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">';
+    html+='<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>';
+    html+='<polyline points="14 2 14 8 20 8"/></svg>';
+    html+='<p>No drawings found.<br>Add drawings in the desktop app.</p></div>';
   } else {
-    keys.forEach(function(disc,i){
-      var id='dg'+disc.replace(/\W+/g,'');
-      var dwgs=groups[disc];
+    discKeys.forEach(function(disc,i){
+      var safeId='dg'+i;
+      var total=groups[disc]._total||0;
       var exp=i===0;
-      html+='<div class="disc-group" data-disc="'+disc+'">'
-        +'<div class="disc-hdr'+(exp?' open':'')+'" onclick="dwgToggle(\''+id+'\')" id="'+id+'h">'
-        +'<div class="disc-title"><span>'+disc+'</span><span class="disc-count">'+dwgs.length+'</span></div>'
-        +'<svg class="disc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>'
-        +'</div><div class="disc-body'+(exp?' open':'')+'" id="'+id+'b">';
-      dwgs.forEach(function(d){
-        var sc={IFR:'st-ifr',IFA:'st-ifa',IFC:'st-ifc','As-Builts':'st-ab',AB:'st-ab'}[d.status]||'st-ifr';
-        var pins=(d.pins||[]).length;
-        html+='<div class="dwg-row" onclick="dwgOpen(\''+d.id+'\')">'
-          +'<div class="dwg-num">'+(d.num||'—')+'</div>'
-          +'<div class="dwg-info"><div class="dwg-name">'+(d.name||d.title||'Untitled')+'</div>'
-          +'<div class="dwg-meta"><span>Rev '+(d.rev||'—')+'</span>'+(pins>0?'<span>📍 '+pins+'</span>':'')+'</div></div>'
-          +'<span class="dwg-st '+sc+'">'+(d.status||'—')+'</span></div>';
+      html+='<div class="disc-group" data-disc="'+disc+'">';
+      html+='<div class="disc-hdr'+(exp?' open':'')+'" onclick="dwgToggle(\''+safeId+'\')" id="'+safeId+'h">';
+      html+='<div class="disc-title"><span>'+disc+'</span><span class="disc-count">'+total+'</span></div>';
+      html+='<svg class="disc-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
+      html+='</div>';
+      html+='<div class="disc-body'+(exp?' open':'')+'" id="'+safeId+'b">';
+
+      var areaKeys=Object.keys(groups[disc]).filter(function(k){return k!=='_total';});
+      var multiArea=areaKeys.length>1||(areaKeys.length===1&&areaKeys[0]!=='');
+
+      areaKeys.forEach(function(area){
+        var dwgs=groups[disc][area];
+        if(multiArea&&area){
+          html+='<div style="padding:6px 14px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.8px;background:var(--bg-elevated);border-bottom:1px solid var(--border)">'+area+'</div>';
+        }
+        dwgs.forEach(function(d){
+          var sc={IFR:'st-ifr',IFA:'st-ifa',IFC:'st-ifc','As-Builts':'st-ab',AB:'st-ab'}[d.status]||'st-ifr';
+          var pins=(d.pins||[]).length;
+          html+='<div class="dwg-row" data-id="'+d.id+'" onclick="dwgOpen(this.dataset.id)">';
+          html+='<div class="dwg-num">'+(d.num||'—')+'</div>';
+          html+='<div class="dwg-info">';
+          html+='<div class="dwg-name">'+(d.name||d.title||'Untitled')+'</div>';
+          html+='<div class="dwg-meta"><span>Rev '+(d.rev||'—')+'</span>';
+          if(pins>0) html+='<span>📍 '+pins+'</span>';
+          html+='</div></div>';
+          html+='<span class="dwg-st '+sc+'">'+(d.status||'—')+'</span>';
+          html+='</div>';
+        });
       });
       html+='</div></div>';
     });
@@ -333,6 +368,7 @@ window.renderDrawingsPage = async function(container){
   html+='</div></div>';
   container.innerHTML=html;
 };
+
 
 // ── Global helpers ─────────────────────────────────────────
 window.dwgToggle=function(id){var h=document.getElementById(id+'h'),b=document.getElementById(id+'b');if(h)h.classList.toggle('open');if(b)b.classList.toggle('open');};
