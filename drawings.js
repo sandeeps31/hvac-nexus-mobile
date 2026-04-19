@@ -47,8 +47,8 @@ if (!document.getElementById('dwg-css')) {
     '.vbtn{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;background:rgba(255,255,255,0.08);border:none;cursor:pointer}',
     '.vbtn:active{opacity:0.7}',
     '.vbtn svg{width:20px;height:20px}',
-    '#dwg-wrap{flex:1;position:relative;overflow:hidden;background:#fff}',
-    '#dwg-frm{position:absolute;inset:0;width:100%;height:100%;border:none}',
+    '#dwg-wrap{flex:1;position:relative;overflow:hidden;background:#2a2a2a}',
+    '#dwg-frm{position:absolute;inset:0;width:100%;height:100%;border:none;background:transparent}',
     '#dwg-pin-layer{position:absolute;inset:0;pointer-events:none;z-index:10}',
     '#dwg-tap-layer{position:absolute;inset:0;z-index:20;pointer-events:none}',
     '#dwg-tap-layer.active{pointer-events:all;cursor:crosshair}',
@@ -125,17 +125,12 @@ if (!document.getElementById('dwg-vwr')) {
   pd.innerHTML = '<div class="dpd-sht" id="dpd-body"></div>';
   document.body.appendChild(pd);
 
-  // Wire fit button
+  // Wire fit button - reload pdf-viewer wrapper to reset zoom
   document.getElementById('dvwr-fit').addEventListener('click', function() {
+    if (!_cur || !_cur.pdfUrl) return;
     var frm = document.getElementById('dwg-frm');
-    var wrap = document.getElementById('dwg-wrap');
-    if (!frm || !wrap) return;
-    var ww = wrap.clientWidth, wh = wrap.clientHeight;
-    var scale = Math.min(ww / 3370, wh / 2384) * 0.95;
-    frm.style.width = (ww / scale) + 'px';
-    frm.style.height = (wh / scale) + 'px';
-    frm.style.transform = 'scale(' + scale + ')';
-    frm.style.transformOrigin = '0 0';
+    frm.src = '';
+    setTimeout(function(){ frm.src = 'pdf-viewer.html?url=' + encodeURIComponent(_cur.pdfUrl); }, 30);
   });
   // Wire toolbar buttons
   document.querySelectorAll('.vtbtn').forEach(function(btn) {
@@ -343,19 +338,10 @@ window.dwgOpen = function(id) {
     frm.style.transform = '';
     frm.style.width = '100%';
     frm.style.height = '100%';
-    frm.src = d.pdfUrl;
-    frm.onload = function() {
-      var wrap = document.getElementById('dwg-wrap');
-      var ww = wrap.clientWidth, wh = wrap.clientHeight;
-      // Use large assumed dimensions so drawing always fits within screen
-      // iOS renders PDF at 96dpi — A1 landscape = ~3370x2384px at 96dpi
-      var scale = Math.min(ww / 3370, wh / 2384) * 0.95;
-      frm.style.width = (ww / scale) + 'px';
-      frm.style.height = (wh / scale) + 'px';
-      frm.style.transform = 'scale(' + scale + ')';
-      frm.style.transformOrigin = '0 0';
-      _renderPins();
-    };
+    frm.style.pointerEvents = 'auto';
+    // Use pdf-viewer.html wrapper for fit-to-screen + native pinch/zoom
+    frm.src = 'pdf-viewer.html?url=' + encodeURIComponent(d.pdfUrl);
+    frm.onload = function() { _renderPins(); };
   } else {
     frm.style.display = 'none';
     noP.style.display = 'flex';

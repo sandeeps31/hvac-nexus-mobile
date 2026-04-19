@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.1, maximum-scale=10.0, user-scalable=yes">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #2a2a2a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #pdf-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      display: block;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    }
+    #loading {
+      color: rgba(255,255,255,0.5);
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      text-align: center;
+    }
+    #loading .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="pdf-container">
+    <div id="loading">
+      <div class="spinner"></div>
+      Loading drawing…
+    </div>
+  </div>
+
+  <script>
+    // Get PDF URL from query string
+    var url = new URLSearchParams(window.location.search).get('url');
+    if (!url) {
+      document.getElementById('loading').textContent = 'No PDF URL provided';
+    } else {
+      // Load PDF.js
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
+      s.onload = function() {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        renderPdf(url);
+      };
+      s.onerror = function() {
+        // Fallback: open PDF directly
+        window.location.href = url;
+      };
+      document.head.appendChild(s);
+    }
+
+    function renderPdf(url) {
+      pdfjsLib.getDocument({ url: url, withCredentials: false }).promise
+        .then(function(doc) { return doc.getPage(1); })
+        .then(function(page) {
+          var container = document.getElementById('pdf-container');
+          var W = window.innerWidth;
+          var H = window.innerHeight;
+
+          // Render at 2x for sharpness, fit to screen
+          var vp0 = page.getViewport({ scale: 1 });
+          var fitScale = Math.min(W / vp0.width, H / vp0.height) * 0.95;
+
+          // Cap canvas at 3000px to avoid iOS black canvas
+          var renderScale = fitScale * 2;
+          if (vp0.width * renderScale > 3000) renderScale = 3000 / vp0.width;
+          if (vp0.height * renderScale > 3000) renderScale = Math.min(renderScale, 3000 / vp0.height);
+
+          var vp = page.getViewport({ scale: renderScale });
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.floor(vp.width);
+          canvas.height = Math.floor(vp.height);
+          canvas.style.width = Math.floor(vp0.width * fitScale) + 'px';
+          canvas.style.height = Math.floor(vp0.height * fitScale) + 'px';
+          canvas.style.maxWidth = W + 'px';
+          canvas.style.maxHeight = H + 'px';
+
+          document.getElementById('loading').remove();
+          container.appendChild(canvas);
+
+          page.render({
+            canvasContext: canvas.getContext('2d'),
+            viewport: vp,
+            intent: 'display'
+          }).promise.then(function() {
+            // Notify parent frame that render is complete
+            try { window.parent.postMessage({ type: 'pdf-ready' }, '*'); } catch(e) {}
+          });
+        })
+        .catch(function(err) {
+          document.getElementById('loading').innerHTML = 
+            '<p style="color:rgba(255,255,255,0.5);font-size:13px">Could not load PDF.<br><small>' + (err.message || '') + '</small></p>';
+        });
+    }
+  </script>
+</body>
+</html>
