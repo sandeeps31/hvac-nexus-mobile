@@ -11,22 +11,32 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      overflow:hidden;
     }
-    #pdf-obj {
-      width:100vw;
-      height:100vh;
-      border:none;
+    #pdf-wrap {
+      background:#2a2a2a;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      width:100%;
+      height:100%;
+      padding:12px;
+    }
+    embed {
       display:block;
+      width:100%;
+      height:100%;
+      box-shadow:0 4px 32px rgba(0,0,0,0.7);
     }
   </style>
 </head>
 <body>
-  <embed id="pdf-obj" type="application/pdf" />
+  <div id="pdf-wrap">
+    <embed id="pdf-obj" type="application/pdf" />
+  </div>
   <script>
     var url = new URLSearchParams(window.location.search).get('url');
     if (url) {
-      document.getElementById('pdf-obj').src = url + '#view=Fit&toolbar=0';
+      document.getElementById('pdf-obj').src = url + '#toolbar=0';
     }
   </script>
 </body>
