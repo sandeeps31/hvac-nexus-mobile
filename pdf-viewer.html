@@ -4,115 +4,153 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.1, maximum-scale=10.0, user-scalable=yes">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { margin:0; padding:0; box-sizing:border-box; }
     html, body {
-      width: 100%; height: 100%;
-      background: #2a2a2a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      width:100%; height:100%;
+      background:#2a2a2a;
+      overflow:scroll;
+      -webkit-overflow-scrolling:touch;
     }
-    #pdf-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
+    #wrap {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-width:100%;
+      min-height:100%;
     }
     canvas {
-      display: block;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+      display:block;
+      box-shadow:0 4px 32px rgba(0,0,0,0.7);
+      /* CSS size stays fixed — we swap canvas content at higher res */
     }
     #loading {
-      color: rgba(255,255,255,0.5);
-      font-family: system-ui, sans-serif;
-      font-size: 14px;
-      text-align: center;
+      position:fixed;
+      inset:0;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      color:rgba(255,255,255,0.5);
+      font-family:system-ui,sans-serif;
+      font-size:14px;
+      gap:12px;
     }
-    #loading .spinner {
-      width: 32px; height: 32px;
-      border: 2px solid rgba(255,255,255,0.2);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      margin: 0 auto 12px;
+    .spin {
+      width:32px; height:32px;
+      border:2px solid rgba(255,255,255,0.2);
+      border-top-color:#fff;
+      border-radius:50%;
+      animation:sp 0.7s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes sp { to { transform:rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div id="pdf-container">
-    <div id="loading">
-      <div class="spinner"></div>
-      Loading drawing…
-    </div>
-  </div>
+  <div id="loading"><div class="spin"></div>Loading…</div>
+  <div id="wrap"></div>
 
   <script>
-    // Get PDF URL from query string
     var url = new URLSearchParams(window.location.search).get('url');
-    if (!url) {
-      document.getElementById('loading').textContent = 'No PDF URL provided';
-    } else {
-      // Load PDF.js
+    if (!url) { document.getElementById('loading').textContent = 'No PDF'; }
+    else {
       var s = document.createElement('script');
       s.src = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
       s.onload = function() {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-        renderPdf(url);
+        init(url);
       };
-      s.onerror = function() {
-        // Fallback: open PDF directly
-        window.location.href = url;
-      };
+      s.onerror = function() { window.location.href = url; };
       document.head.appendChild(s);
     }
 
-    function renderPdf(url) {
+    var _page = null;
+    var _canvas = null;
+    var _fitW = 0, _fitH = 0;   // CSS display size
+    var _rendering = false;
+    var _pendingScale = null;
+    var _lastRenderScale = 0;
+    var _zoomTimer = null;
+
+    function init(url) {
       pdfjsLib.getDocument({ url: url, withCredentials: false }).promise
         .then(function(doc) { return doc.getPage(1); })
         .then(function(page) {
-          var container = document.getElementById('pdf-container');
+          _page = page;
           var W = window.innerWidth;
           var H = window.innerHeight;
-
-          // Render at 2x for sharpness, fit to screen
           var vp0 = page.getViewport({ scale: 1 });
-          var fitScale = Math.min(W / vp0.width, H / vp0.height) * 0.95;
 
-          // Render at high res — use device pixel ratio, cap at 3800px for iOS
-          var dpr = Math.min(window.devicePixelRatio || 2, 3);
-          var renderScale = fitScale * dpr;
-          var maxPx = 3800;
-          if (vp0.width * renderScale > maxPx) renderScale = maxPx / vp0.width;
-          if (vp0.height * renderScale > maxPx) renderScale = Math.min(renderScale, maxPx / vp0.height);
+          // Fit scale: show full page on screen with padding
+          var fit = Math.min(W / vp0.width, H / vp0.height) * 0.92;
 
-          var vp = page.getViewport({ scale: renderScale });
-          var canvas = document.createElement('canvas');
-          canvas.width = Math.floor(vp.width);
-          canvas.height = Math.floor(vp.height);
-          canvas.style.width = Math.floor(vp0.width * fitScale) + 'px';
-          canvas.style.height = Math.floor(vp0.height * fitScale) + 'px';
-          canvas.style.maxWidth = W + 'px';
-          canvas.style.maxHeight = H + 'px';
+          // CSS (display) size
+          _fitW = Math.floor(vp0.width * fit);
+          _fitH = Math.floor(vp0.height * fit);
 
+          // Create canvas
+          _canvas = document.createElement('canvas');
+          _canvas.style.width  = _fitW + 'px';
+          _canvas.style.height = _fitH + 'px';
           document.getElementById('loading').remove();
-          container.appendChild(canvas);
+          document.getElementById('wrap').appendChild(_canvas);
 
-          page.render({
-            canvasContext: canvas.getContext('2d'),
-            viewport: vp,
-            intent: 'display'
-          }).promise.then(function() {
-            // Notify parent frame that render is complete
-            try { window.parent.postMessage({ type: 'pdf-ready' }, '*'); } catch(e) {}
-          });
+          // Initial render at screen DPR for sharpness
+          var dpr = Math.min(window.devicePixelRatio || 2, 3);
+          renderAt(fit * dpr);
+
+          // Re-render on zoom (scroll event fires during pinch on iOS)
+          window.addEventListener('scroll', onZoom, { passive: true });
+          window.visualViewport && window.visualViewport.addEventListener('scale', onZoom);
         })
-        .catch(function(err) {
-          document.getElementById('loading').innerHTML = 
-            '<p style="color:rgba(255,255,255,0.5);font-size:13px">Could not load PDF.<br><small>' + (err.message || '') + '</small></p>';
+        .catch(function(e) {
+          document.getElementById('loading').innerHTML =
+            '<p style="color:rgba(255,255,255,0.4);text-align:center;padding:20px">Failed to load PDF<br><small>' + (e.message||'') + '</small></p>';
         });
+    }
+
+    function renderAt(renderScale) {
+      if (_rendering) { _pendingScale = renderScale; return; }
+
+      // Cap to avoid iOS black canvas
+      var vp0 = _page.getViewport({ scale: 1 });
+      var maxPx = 3800;
+      if (vp0.width  * renderScale > maxPx) renderScale = maxPx / vp0.width;
+      if (vp0.height * renderScale > maxPx) renderScale = Math.min(renderScale, maxPx / vp0.height);
+
+      // Skip if scale hasn't changed meaningfully
+      if (Math.abs(renderScale - _lastRenderScale) / Math.max(_lastRenderScale, 0.1) < 0.15) return;
+
+      _rendering = true;
+      _lastRenderScale = renderScale;
+
+      var vp = _page.getViewport({ scale: renderScale });
+      _canvas.width  = Math.floor(vp.width);
+      _canvas.height = Math.floor(vp.height);
+
+      _page.render({
+        canvasContext: _canvas.getContext('2d'),
+        viewport: vp,
+        intent: 'display'
+      }).promise.then(function() {
+        _rendering = false;
+        if (_pendingScale !== null) {
+          var s = _pendingScale;
+          _pendingScale = null;
+          renderAt(s);
+        }
+      }).catch(function() { _rendering = false; });
+    }
+
+    function onZoom() {
+      clearTimeout(_zoomTimer);
+      _zoomTimer = setTimeout(function() {
+        // Calculate current visual scale from viewport
+        var vScale = window.visualViewport ? window.visualViewport.scale : 1;
+        var vp0 = _page.getViewport({ scale: 1 });
+        var fit = Math.min(window.innerWidth / vp0.width, window.innerHeight / vp0.height) * 0.92;
+        var dpr = Math.min(window.devicePixelRatio || 2, 3);
+        renderAt(fit * vScale * dpr);
+      }, 300);
     }
   </script>
 </body>
