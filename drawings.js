@@ -125,14 +125,18 @@ if (!document.getElementById('dwg-vwr')) {
   pd.innerHTML = '<div class="dpd-sht" id="dpd-body"></div>';
   document.body.appendChild(pd);
 
-  // Wire fit button — reload with fit parameter
+  // Wire fit button
   document.getElementById('dvwr-fit').addEventListener('click', function() {
     var frm = document.getElementById('dwg-frm');
-    if (!_cur || !_cur.pdfUrl) return;
-    frm.src = '';
-    setTimeout(function(){ frm.src = _cur.pdfUrl + '#view=FitH&toolbar=0'; }, 50);
+    var wrap = document.getElementById('dwg-wrap');
+    if (!frm || !wrap) return;
+    var ww = wrap.clientWidth, wh = wrap.clientHeight;
+    var scale = Math.min(ww / 1684, wh / 1190) * 0.95;
+    frm.style.width = (ww / scale) + 'px';
+    frm.style.height = (wh / scale) + 'px';
+    frm.style.transform = 'scale(' + scale + ')';
+    frm.style.transformOrigin = '0 0';
   });
-
   // Wire toolbar buttons
   document.querySelectorAll('.vtbtn').forEach(function(btn) {
     btn.addEventListener('click', function() { dwgSetTool(btn.dataset.tool); });
@@ -336,8 +340,21 @@ window.dwgOpen = function(id) {
   if (d.pdfUrl) {
     noP.style.display = 'none';
     frm.style.display = 'block';
-    // #view=FitH tells iOS PDF viewer to fit to width on open
-    frm.src = d.pdfUrl + '#view=FitH&toolbar=0';
+    frm.style.transform = '';
+    frm.style.width = '100%';
+    frm.style.height = '100%';
+    frm.src = d.pdfUrl;
+    frm.onload = function() {
+      var wrap = document.getElementById('dwg-wrap');
+      var ww = wrap.clientWidth, wh = wrap.clientHeight;
+      // Scale down to fit — assumes typical A1 landscape drawing
+      var scale = Math.min(ww / 1684, wh / 1190) * 0.95;
+      frm.style.width = (ww / scale) + 'px';
+      frm.style.height = (wh / scale) + 'px';
+      frm.style.transform = 'scale(' + scale + ')';
+      frm.style.transformOrigin = '0 0';
+      _renderPins();
+    };
   } else {
     frm.style.display = 'none';
     noP.style.display = 'flex';
