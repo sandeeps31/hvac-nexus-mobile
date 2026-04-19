@@ -125,14 +125,12 @@ if (!document.getElementById('dwg-vwr')) {
   pd.innerHTML = '<div class="dpd-sht" id="dpd-body"></div>';
   document.body.appendChild(pd);
 
-  // Wire fit button
+  // Wire fit button — reload with fit parameter
   document.getElementById('dvwr-fit').addEventListener('click', function() {
     var frm = document.getElementById('dwg-frm');
-    if (!frm || !frm.src) return;
-    // Reload iframe to reset zoom to fit
-    var src = frm.src;
+    if (!_cur || !_cur.pdfUrl) return;
     frm.src = '';
-    setTimeout(function(){ frm.src = src; }, 50);
+    setTimeout(function(){ frm.src = _cur.pdfUrl + '#view=FitH&toolbar=0'; }, 50);
   });
 
   // Wire toolbar buttons
@@ -338,7 +336,8 @@ window.dwgOpen = function(id) {
   if (d.pdfUrl) {
     noP.style.display = 'none';
     frm.style.display = 'block';
-    frm.src = d.pdfUrl;
+    // #view=FitH tells iOS PDF viewer to fit to width on open
+    frm.src = d.pdfUrl + '#view=FitH&toolbar=0';
   } else {
     frm.style.display = 'none';
     noP.style.display = 'flex';
