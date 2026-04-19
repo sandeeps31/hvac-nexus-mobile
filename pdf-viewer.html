@@ -81,10 +81,12 @@
           var vp0 = page.getViewport({ scale: 1 });
           var fitScale = Math.min(W / vp0.width, H / vp0.height) * 0.95;
 
-          // Cap canvas at 3000px to avoid iOS black canvas
-          var renderScale = fitScale * 2;
-          if (vp0.width * renderScale > 3000) renderScale = 3000 / vp0.width;
-          if (vp0.height * renderScale > 3000) renderScale = Math.min(renderScale, 3000 / vp0.height);
+          // Render at high res — use device pixel ratio, cap at 3800px for iOS
+          var dpr = Math.min(window.devicePixelRatio || 2, 3);
+          var renderScale = fitScale * dpr;
+          var maxPx = 3800;
+          if (vp0.width * renderScale > maxPx) renderScale = maxPx / vp0.width;
+          if (vp0.height * renderScale > maxPx) renderScale = Math.min(renderScale, maxPx / vp0.height);
 
           var vp = page.getViewport({ scale: renderScale });
           var canvas = document.createElement('canvas');
