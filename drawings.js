@@ -131,7 +131,7 @@ if (!document.getElementById('dwg-vwr')) {
     var wrap = document.getElementById('dwg-wrap');
     if (!frm || !wrap) return;
     var ww = wrap.clientWidth, wh = wrap.clientHeight;
-    var scale = Math.min(ww / 1684, wh / 1190) * 0.95;
+    var scale = Math.min(ww / 3370, wh / 2384) * 0.95;
     frm.style.width = (ww / scale) + 'px';
     frm.style.height = (wh / scale) + 'px';
     frm.style.transform = 'scale(' + scale + ')';
@@ -347,8 +347,9 @@ window.dwgOpen = function(id) {
     frm.onload = function() {
       var wrap = document.getElementById('dwg-wrap');
       var ww = wrap.clientWidth, wh = wrap.clientHeight;
-      // Scale down to fit — assumes typical A1 landscape drawing
-      var scale = Math.min(ww / 1684, wh / 1190) * 0.95;
+      // Use large assumed dimensions so drawing always fits within screen
+      // iOS renders PDF at 96dpi — A1 landscape = ~3370x2384px at 96dpi
+      var scale = Math.min(ww / 3370, wh / 2384) * 0.95;
       frm.style.width = (ww / scale) + 'px';
       frm.style.height = (wh / scale) + 'px';
       frm.style.transform = 'scale(' + scale + ')';
@@ -469,3 +470,5 @@ window.dwgDelPin = function(id) {
 };
 
 })();
+
+// v21 - fit to screen on load
