@@ -387,7 +387,7 @@ window.mrOpenReceive = function(supplier) {
         + '<div class="mr-item-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
         + '<div class="mr-item-info">'
         +   '<div class="mr-item-eq">' + escH(enr.equipId) + statusBadge + '</div>'
-        +   (enr.location ? '<div class="mr-item-loc">📍 ' + escH(enr.location) + '</div>' : '')
+        +   (enr.location ? '<div class="mr-item-loc">' + escH(enr.location) + '</div>' : '')
         +   (enr.model ? '<div class="mr-item-mfg">' + escH(enr.model) + '</div>' : '')
         +   '<div class="mr-item-dmg" data-id="' + escH(it.id) + '" onclick="event.stopPropagation();mrToggleDmg(this.dataset.id)">'
         +     '<div class="mr-item-dmg-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
@@ -401,7 +401,7 @@ window.mrOpenReceive = function(supplier) {
   // Save bar
   html += '<div class="mr-fab-bar">'
     + '<button class="btn btn-secondary" onclick="appNav(\'materialReceiving\')">Cancel</button>'
-    + '<button class="btn btn-primary" id="mr-save-btn" onclick="mrSaveReceipt()">Save Receipt</button>'
+    + '<button class="btn btn-primary" id="mr-save-btn" onclick="mrSaveReceipt()">Receive Goods</button>'
     + '</div>';
 
   html += '</div>';
@@ -595,7 +595,7 @@ window.mrSaveReceipt = async function() {
     console.error('[MR save]', e);
     alert('Save failed: ' + (e.message || 'unknown error'));
     btn.disabled = false;
-    btn.textContent = 'Save Receipt';
+    btn.textContent = 'Receive Goods';
   }
 };
 
