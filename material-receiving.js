@@ -366,9 +366,9 @@ window.mrOpenReceive = function(supplier) {
   var container = document.getElementById('app-main');
   if (!container) return;
 
-  // Reset filters when opening a new supplier
+  // Reset filters when opening a new supplier — default to outstanding only
   _sortBy = 'outstanding';
-  _filterStatus = 'all';
+  _filterStatus = 'due';
   _filterTypes = new Set();
   _filterLocations = new Set();
 
@@ -412,7 +412,7 @@ window.mrOpenReceive = function(supplier) {
   html += '<div class="mr-section-hdr"><span>Items</span><span id="mr-sel-count" style="color:var(--accent);font-weight:700">0 selected</span></div>';
   html += '<div onclick="mrToggleSelectAll()" id="mr-select-all" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:11px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
     + '<div id="mr-select-all-cb" style="width:22px;height:22px;border:2px solid var(--border);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-card)"><svg id="mr-select-all-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" style="width:14px;height:14px;display:none"><polyline points="20 6 9 17 4 12"/></svg></div>'
-    + '<span id="mr-select-all-label" style="font-size:14px;font-weight:600;color:var(--text-primary)">Select all visible</span>'
+    + '<span id="mr-select-all-label" style="font-size:14px;font-weight:600;color:var(--text-primary)">Select all</span>'
     + '</div>';
 
   // Sort + Filter bar
@@ -768,7 +768,7 @@ function _updateSelectAllState() {
     } else if (allSel) {
       label.textContent = 'Deselect all (' + visibleIds.length + ')';
     } else {
-      label.textContent = 'Select all visible (' + visibleIds.length + ')';
+      label.textContent = 'Select all (' + visibleIds.length + ')';
     }
   }
 }
