@@ -62,7 +62,30 @@ if (!document.getElementById('mr-css')) {
     /* Empty state */
     '.mr-empty{padding:40px 20px;text-align:center;color:var(--text-tertiary)}',
     '.mr-empty svg{width:48px;height:48px;margin-bottom:14px;opacity:0.4}',
-    '.mr-empty p{font-size:14px;line-height:1.5}'
+    '.mr-empty p{font-size:14px;line-height:1.5}',
+    /* Sort/filter bar */
+    '.mr-tools{display:flex;gap:8px;margin-bottom:12px;align-items:center}',
+    '.mr-tool-btn{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:9px 12px;font-size:13px;font-weight:500;color:var(--text-primary);cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font)}',
+    '.mr-tool-btn:active{background:var(--bg-elevated)}',
+    '.mr-tool-btn.has-filter{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}',
+    '.mr-tool-btn svg{width:14px;height:14px}',
+    '.mr-tool-badge{background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}',
+    /* Bottom sheet */
+    '#mr-sheet-ov{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;display:none;align-items:flex-end}',
+    '#mr-sheet-ov.open{display:flex}',
+    '.mr-sheet{background:var(--bg-card);border-radius:20px 20px 0 0;width:100%;max-height:75vh;overflow-y:auto;padding:8px 0 calc(20px + env(safe-area-inset-bottom,0px));animation:sheetUp 0.25s ease}',
+    '.mr-sheet-hdr{padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}',
+    '.mr-sheet-title{font-size:15px;font-weight:700;color:var(--text-primary)}',
+    '.mr-sheet-close{width:32px;height:32px;border-radius:50%;background:var(--bg-elevated);border:none;cursor:pointer;font-size:20px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center}',
+    '.mr-sheet-row{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border);-webkit-tap-highlight-color:transparent}',
+    '.mr-sheet-row:active{background:var(--bg-elevated)}',
+    '.mr-sheet-row-label{font-size:14px;color:var(--text-primary);flex:1}',
+    '.mr-sheet-row .check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0}',
+    '.mr-sheet-row.on .check{background:var(--accent);border-color:var(--accent)}',
+    '.mr-sheet-row.on .check svg{display:block}',
+    '.mr-sheet-row .check svg{width:12px;height:12px;color:#fff;display:none}',
+    '.mr-sheet-section{padding:12px 20px 6px;font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.8px;background:var(--bg-elevated);border-bottom:1px solid var(--border)}',
+    '.mr-sheet-actions{padding:14px 20px;display:flex;gap:10px;border-top:1px solid var(--border);position:sticky;bottom:0;background:var(--bg-card)}'
   ].join('');
   document.head.appendChild(st);
 }
@@ -78,6 +101,10 @@ var _damaged = new Set();
 var _photos = [];       // {url, name, dataUrl}
 var _docketImg = null;  // {url, name, dataUrl}
 var _userName = '';
+var _sortBy = 'outstanding';  // outstanding | equipId | location | type
+var _filterStatus = 'all';    // all | due | received
+var _filterTypes = new Set(); // empty = all types
+var _filterLocations = new Set(); // empty = all locations
 
 // ── Helpers ────────────────────────────────────────────────
 function todayISO() {
@@ -327,16 +354,17 @@ window.mrOpenReceive = function(supplier) {
   var container = document.getElementById('app-main');
   if (!container) return;
 
-  var supplierItems = _items.filter(function(it) {
+  // Reset filters when opening a new supplier
+  _sortBy = 'outstanding';
+  _filterStatus = 'all';
+  _filterTypes = new Set();
+  _filterLocations = new Set();
+
+  var allSupplierItems = _items.filter(function(it) {
     return (it.manufacturer || '').trim() === supplier && it.equipId;
   });
-  // Sort outstanding first
-  supplierItems.sort(function(a,b) {
-    var aOut = ((parseInt(a.qty,10)||1) - (parseInt(a.qtyDelivered,10)||0)) > 0 ? 0 : 1;
-    var bOut = ((parseInt(b.qty,10)||1) - (parseInt(b.qtyDelivered,10)||0)) > 0 ? 0 : 1;
-    if (aOut !== bOut) return aOut - bOut;
-    return (a.equipId||'').localeCompare(b.equipId||'');
-  });
+  // Store on window for sort/filter to access
+  window._mrAllItems = allSupplierItems;
 
   var html = '<div class="page">';
 
@@ -368,35 +396,24 @@ window.mrOpenReceive = function(supplier) {
   html += '</div>';
   html += '<input type="file" id="mr-photo-input" accept="image/*" capture="environment" style="display:none" onchange="mrPhotoSelected(event)">';
 
-  // Items
-  html += '<div class="mr-section-hdr"><span>Items Received</span><span id="mr-sel-count" style="color:var(--accent);font-weight:700">0 selected</span></div>';
+  // Items section header with count
+  html += '<div class="mr-section-hdr"><span>Items</span><span id="mr-sel-count" style="color:var(--accent);font-weight:700">0 selected</span></div>';
 
-  if (supplierItems.length === 0) {
-    html += '<div class="mr-empty"><p>No items from this supplier.</p></div>';
-  } else {
-    supplierItems.forEach(function(it) {
-      var enr = _enrichItem(it);
-      var qty = parseInt(it.qty,10)||1;
-      var del = parseInt(it.qtyDelivered,10)||0;
-      var outstanding = qty - del;
-      var statusBadge = outstanding > 0
-        ? '<span style="font-size:10px;font-weight:600;background:var(--accent-dim);color:var(--accent);padding:2px 6px;border-radius:10px;margin-left:6px">DUE</span>'
-        : '<span style="font-size:10px;font-weight:600;background:rgba(34,197,94,0.15);color:#22C55E;padding:2px 6px;border-radius:10px;margin-left:6px">RECEIVED</span>';
+  // Sort + Filter bar
+  html += '<div class="mr-tools">'
+    + '<button class="mr-tool-btn" id="mr-sort-btn" onclick="mrOpenSortSheet()">'
+    +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="9" y1="18" x2="15" y2="18"/></svg>'
+    +   '<span id="mr-sort-label">Outstanding first</span>'
+    + '</button>'
+    + '<button class="mr-tool-btn" id="mr-filter-btn" onclick="mrOpenFilterSheet()">'
+    +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>'
+    +   '<span>Filter</span>'
+    +   '<span class="mr-tool-badge" id="mr-filter-badge" style="display:none">0</span>'
+    + '</button>'
+    + '</div>';
 
-      html += '<div class="mr-item" data-id="' + escH(it.id) + '" onclick="mrToggleItem(this.dataset.id)">'
-        + '<div class="mr-item-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
-        + '<div class="mr-item-info">'
-        +   '<div class="mr-item-eq">' + escH(enr.equipId) + statusBadge + '</div>'
-        +   (enr.location ? '<div class="mr-item-loc">' + escH(enr.location) + '</div>' : '')
-        +   (enr.model ? '<div class="mr-item-mfg">' + escH(enr.model) + '</div>' : '')
-        +   '<div class="mr-item-dmg" data-id="' + escH(it.id) + '" onclick="event.stopPropagation();mrToggleDmg(this.dataset.id)">'
-        +     '<div class="mr-item-dmg-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
-        +     '<span>Mark as damaged</span>'
-        +   '</div>'
-        + '</div>'
-        + '</div>';
-    });
-  }
+  // Items list container
+  html += '<div id="mr-items-list"></div>';
 
   // Save bar
   html += '<div class="mr-fab-bar">'
@@ -406,7 +423,239 @@ window.mrOpenReceive = function(supplier) {
 
   html += '</div>';
   container.innerHTML = html;
+
+  // Initial render of items
+  _renderItemsList();
 };
+
+// ── Render filtered/sorted items ──────────────────────────
+function _renderItemsList() {
+  var listEl = document.getElementById('mr-items-list');
+  if (!listEl) return;
+
+  var items = (window._mrAllItems || []).slice();
+
+  // Apply filters
+  items = items.filter(function(it) {
+    var enr = _enrichItem(it);
+    var qty = parseInt(it.qty,10)||1;
+    var del = parseInt(it.qtyDelivered,10)||0;
+    var outstanding = qty - del > 0;
+    if (_filterStatus === 'due' && !outstanding) return false;
+    if (_filterStatus === 'received' && outstanding) return false;
+    if (_filterTypes.size > 0 && !_filterTypes.has(enr.equipType || '')) return false;
+    if (_filterLocations.size > 0 && !_filterLocations.has(enr.location || '')) return false;
+    return true;
+  });
+
+  // Apply sort
+  items.sort(function(a, b) {
+    var ea = _enrichItem(a), eb = _enrichItem(b);
+    if (_sortBy === 'outstanding') {
+      var aOut = ((parseInt(a.qty,10)||1) - (parseInt(a.qtyDelivered,10)||0)) > 0 ? 0 : 1;
+      var bOut = ((parseInt(b.qty,10)||1) - (parseInt(b.qtyDelivered,10)||0)) > 0 ? 0 : 1;
+      if (aOut !== bOut) return aOut - bOut;
+      return (a.equipId||'').localeCompare(b.equipId||'');
+    }
+    if (_sortBy === 'equipId') return (a.equipId||'').localeCompare(b.equipId||'');
+    if (_sortBy === 'location') return (ea.location||'').localeCompare(eb.location||'');
+    if (_sortBy === 'type') return (ea.equipType||'').localeCompare(eb.equipType||'');
+    return 0;
+  });
+
+  // Update sort label
+  var sortLabels = {
+    outstanding: 'Outstanding first',
+    equipId: 'Equipment ID',
+    location: 'Location',
+    type: 'Type'
+  };
+  var sortEl = document.getElementById('mr-sort-label');
+  if (sortEl) sortEl.textContent = sortLabels[_sortBy] || 'Sort';
+
+  // Update filter badge + highlight
+  var filterCount = (_filterStatus !== 'all' ? 1 : 0) + _filterTypes.size + _filterLocations.size;
+  var filterBtn = document.getElementById('mr-filter-btn');
+  var filterBadge = document.getElementById('mr-filter-badge');
+  if (filterBtn) filterBtn.classList.toggle('has-filter', filterCount > 0);
+  if (filterBadge) {
+    if (filterCount > 0) {
+      filterBadge.style.display = '';
+      filterBadge.textContent = filterCount;
+    } else {
+      filterBadge.style.display = 'none';
+    }
+  }
+
+  // Render items
+  if (items.length === 0) {
+    listEl.innerHTML = '<div class="mr-empty"><p>No items match your filters.</p></div>';
+    return;
+  }
+
+  var html = '';
+  items.forEach(function(it) {
+    var enr = _enrichItem(it);
+    var qty = parseInt(it.qty,10)||1;
+    var del = parseInt(it.qtyDelivered,10)||0;
+    var outstanding = qty - del;
+    var statusBadge = outstanding > 0
+      ? '<span style="font-size:10px;font-weight:600;background:var(--accent-dim);color:var(--accent);padding:2px 6px;border-radius:10px;margin-left:6px">DUE</span>'
+      : '<span style="font-size:10px;font-weight:600;background:rgba(34,197,94,0.15);color:#22C55E;padding:2px 6px;border-radius:10px;margin-left:6px">RECEIVED</span>';
+    var sel = _selected.has(it.id);
+    var dmg = _damaged.has(it.id);
+    html += '<div class="mr-item' + (sel ? ' sel' : '') + '" data-id="' + escH(it.id) + '" onclick="mrToggleItem(this.dataset.id)">'
+      + '<div class="mr-item-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+      + '<div class="mr-item-info">'
+      +   '<div class="mr-item-eq">' + escH(enr.equipId) + statusBadge + '</div>'
+      +   (enr.location ? '<div class="mr-item-loc">' + escH(enr.location) + '</div>' : '')
+      +   (enr.equipType ? '<div class="mr-item-mfg">' + escH(enr.equipType) + (enr.model ? ' · ' + escH(enr.model) : '') + '</div>' : (enr.model ? '<div class="mr-item-mfg">' + escH(enr.model) + '</div>' : ''))
+      +   '<div class="mr-item-dmg' + (dmg ? ' on' : '') + '" data-id="' + escH(it.id) + '" onclick="event.stopPropagation();mrToggleDmg(this.dataset.id)">'
+      +     '<div class="mr-item-dmg-cb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+      +     '<span>Mark as damaged</span>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
+  });
+  listEl.innerHTML = html;
+}
+
+// ── Sort sheet ─────────────────────────────────────────────
+window.mrOpenSortSheet = function() {
+  var opts = [
+    { v: 'outstanding', l: 'Outstanding first' },
+    { v: 'equipId',     l: 'Equipment ID' },
+    { v: 'location',    l: 'Location' },
+    { v: 'type',        l: 'Equipment Type' }
+  ];
+
+  var html = '<div class="mr-sheet">'
+    + '<div class="mr-sheet-hdr"><span class="mr-sheet-title">Sort by</span>'
+    + '<button class="mr-sheet-close" onclick="mrCloseSheet()">×</button></div>';
+  opts.forEach(function(o) {
+    var on = _sortBy === o.v;
+    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrApplySort(\'' + o.v + '\')">'
+      + '<span class="mr-sheet-row-label">' + o.l + '</span>'
+      + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+      + '</div>';
+  });
+  html += '</div>';
+
+  _showSheet(html);
+};
+
+window.mrApplySort = function(v) {
+  _sortBy = v;
+  mrCloseSheet();
+  _renderItemsList();
+};
+
+// ── Filter sheet ───────────────────────────────────────────
+window.mrOpenFilterSheet = function() {
+  var items = window._mrAllItems || [];
+
+  // Collect unique types and locations
+  var types = {}, locations = {};
+  items.forEach(function(it) {
+    var enr = _enrichItem(it);
+    if (enr.equipType) types[enr.equipType] = (types[enr.equipType] || 0) + 1;
+    if (enr.location) locations[enr.location] = (locations[enr.location] || 0) + 1;
+  });
+  var typeKeys = Object.keys(types).sort();
+  var locKeys = Object.keys(locations).sort();
+
+  var html = '<div class="mr-sheet">'
+    + '<div class="mr-sheet-hdr"><span class="mr-sheet-title">Filter</span>'
+    + '<button class="mr-sheet-close" onclick="mrCloseSheet()">×</button></div>';
+
+  // Status
+  html += '<div class="mr-sheet-section">Status</div>';
+  ['all','due','received'].forEach(function(s) {
+    var labels = { all: 'All items', due: 'Outstanding only', received: 'Received only' };
+    var on = _filterStatus === s;
+    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrApplyFilterStatus(\'' + s + '\')">'
+      + '<span class="mr-sheet-row-label">' + labels[s] + '</span>'
+      + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+      + '</div>';
+  });
+
+  // Equipment Types
+  if (typeKeys.length > 0) {
+    html += '<div class="mr-sheet-section">Equipment Type</div>';
+    typeKeys.forEach(function(t) {
+      var on = _filterTypes.has(t);
+      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrToggleFilterType(\'' + t.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
+        + '<span class="mr-sheet-row-label">' + escH(t) + ' <span style="color:var(--text-tertiary);font-size:12px">(' + types[t] + ')</span></span>'
+        + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+        + '</div>';
+    });
+  }
+
+  // Locations
+  if (locKeys.length > 0) {
+    html += '<div class="mr-sheet-section">Location</div>';
+    locKeys.forEach(function(l) {
+      var on = _filterLocations.has(l);
+      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrToggleFilterLoc(\'' + l.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
+        + '<span class="mr-sheet-row-label">' + escH(l) + ' <span style="color:var(--text-tertiary);font-size:12px">(' + locations[l] + ')</span></span>'
+        + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+        + '</div>';
+    });
+  }
+
+  html += '<div class="mr-sheet-actions">'
+    + '<button class="btn btn-secondary" style="flex:1" onclick="mrClearFilters()">Clear all</button>'
+    + '<button class="btn btn-primary" style="flex:1" onclick="mrCloseSheet()">Apply</button>'
+    + '</div>';
+
+  html += '</div>';
+  _showSheet(html);
+};
+
+window.mrApplyFilterStatus = function(s) {
+  _filterStatus = s;
+  // Re-open sheet to refresh
+  mrOpenFilterSheet();
+};
+
+window.mrToggleFilterType = function(t) {
+  if (_filterTypes.has(t)) _filterTypes.delete(t);
+  else _filterTypes.add(t);
+  mrOpenFilterSheet();
+};
+
+window.mrToggleFilterLoc = function(l) {
+  if (_filterLocations.has(l)) _filterLocations.delete(l);
+  else _filterLocations.add(l);
+  mrOpenFilterSheet();
+};
+
+window.mrClearFilters = function() {
+  _filterStatus = 'all';
+  _filterTypes = new Set();
+  _filterLocations = new Set();
+  mrCloseSheet();
+};
+
+window.mrCloseSheet = function() {
+  var ov = document.getElementById('mr-sheet-ov');
+  if (ov) ov.classList.remove('open');
+  _renderItemsList();
+};
+
+function _showSheet(html) {
+  var ov = document.getElementById('mr-sheet-ov');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'mr-sheet-ov';
+    ov.addEventListener('click', function(e) {
+      if (e.target === ov) mrCloseSheet();
+    });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = html;
+  ov.classList.add('open');
+}
 
 window.mrToggleItem = function(id) {
   if (_selected.has(id)) {
