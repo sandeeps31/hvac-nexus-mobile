@@ -168,20 +168,32 @@ function _buildEquipLookup(eqRaw) {
   var lookup = {};
   if (!eqRaw || !Array.isArray(eqRaw.tabs)) return lookup;
   eqRaw.tabs.forEach(function(tab) {
-    if (!tab || !Array.isArray(tab.revisions)) return;
-    // Use last published revision
-    var rev = null;
-    for (var i = tab.revisions.length - 1; i >= 0; i--) {
-      if (tab.revisions[i].published) { rev = tab.revisions[i]; break; }
+    if (!tab) return;
+    // Try direct rows first, then last published revision
+    var rows = null;
+    if (Array.isArray(tab.rows)) {
+      rows = tab.rows;
+    } else if (Array.isArray(tab.revisions)) {
+      for (var i = tab.revisions.length - 1; i >= 0; i--) {
+        if (tab.revisions[i].published && Array.isArray(tab.revisions[i].rows)) {
+          rows = tab.revisions[i].rows;
+          break;
+        }
+      }
+      // Fallback: use last revision regardless of published flag
+      if (!rows && tab.revisions.length > 0) {
+        var last = tab.revisions[tab.revisions.length - 1];
+        if (Array.isArray(last.rows)) rows = last.rows;
+      }
     }
-    if (!rev || !Array.isArray(rev.rows)) return;
-    rev.rows.forEach(function(row) {
+    if (!rows) return;
+    rows.forEach(function(row) {
       var id = row.tag || row.id;
       if (!id) return;
       lookup[id] = {
         equipType: tab.name || row.type || '',
         location: row.location || row.area || '',
-        subLocation: row.subLocation || row.zone || '',
+        subLocation: row.sublocation || row.subLocation || row.zone || '',
         manufacturer: row.manufacturer || '',
         model: row.model || ''
       };
