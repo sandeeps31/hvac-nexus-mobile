@@ -126,7 +126,8 @@ var PAGE_CONFIG = {
   precx:        { title: 'Pre-Cx Checklist', sub: 'Commissioning', nav: 'commissioning' },
   cxtracker:    { title: 'Cx Tracker', sub: 'Commissioning', nav: 'commissioning' },
   procschedule: { title: 'Procurement Schedule', sub: 'Procurement', nav: 'procurement' },
-  pos:          { title: 'Purchase Orders', sub: 'Procurement', nav: 'procurement' }
+  pos:          { title: 'Purchase Orders', sub: 'Procurement', nav: 'procurement' },
+  materialReceiving: { title: 'Material Receiving', sub: 'Procurement', nav: 'procurement' }
 };
 
 function appNav(page, params) {
@@ -191,6 +192,7 @@ function renderPage(page, params) {
       case 'procurement':  renderProcurement(main); break;
       case 'drawings':     renderDrawingsModule(main); break;
       case 'equipment':    renderEquipmentModule(main); break;
+      case 'materialReceiving': renderMaterialReceivingModule(main); break;
       // Sub-pages (stubs — will be built per module)
       default:
         renderComingSoon(main, page);
@@ -413,6 +415,7 @@ function renderProcurement(main) {
   main.innerHTML = '<div class="page">'
     + '<div class="section-header"><span class="section-title">Procurement</span></div>'
 
+    + makeModuleItem('materialReceiving','#22C55E', 'rgba(34,197,94,0.15)', mrIcon(),     'Material Receiving','Edit')
     + makeModuleItem('procschedule','#FBBF24', 'rgba(251,191,36,0.15)',  procIcon(),      'Procurement Schedule','View')
     + makeModuleItem('pos',         '#60A5FA', 'rgba(59,130,246,0.15)',  posIcon(),       'Purchase Orders',    'View')
 
@@ -453,6 +456,23 @@ function renderEquipmentModule(main) {
   document.head.appendChild(s);
 }
 
+// ── Material Receiving Module ───────────────────────────────
+var _materialReceivingScriptLoaded = false;
+function renderMaterialReceivingModule(main) {
+  if (_materialReceivingScriptLoaded) {
+    window.renderMaterialReceivingPage(main);
+    return;
+  }
+  var s = document.createElement('script');
+  s.src = 'material-receiving.js';
+  s.onload = function() {
+    _materialReceivingScriptLoaded = true;
+    window.renderMaterialReceivingPage(main);
+  };
+  s.onerror = function() { renderComingSoon(main, 'materialReceiving'); };
+  document.head.appendChild(s);
+}
+
 
 // ── Coming Soon Stub ───────────────────────────────────────
 function renderComingSoon(main, page) {
@@ -490,6 +510,7 @@ function precxIcon()      { return '<circle cx="12" cy="12" r="3"/><path d="M19.
 function cxtrackerIcon()  { return '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'; }
 function procIcon()       { return '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>'; }
 function posIcon()        { return '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>'; }
+function mrIcon()         { return '<path d="M16 16h6M19 13v6"/><rect x="2" y="4" width="13" height="16" rx="2"/><path d="M2 8h13"/>'; }
 
 // ── Session / Project ──────────────────────────────────────
 function loadSession() {
