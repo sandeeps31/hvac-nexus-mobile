@@ -546,7 +546,7 @@ window.mrOpenSortSheet = function() {
     + '<button class="mr-sheet-close" onclick="mrCloseSheet()">×</button></div>';
   opts.forEach(function(o) {
     var on = _sortBy === o.v;
-    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrApplySort(\'' + o.v + '\')">'
+    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" data-sort="' + o.v + '" onclick="mrApplySort(\'' + o.v + '\')">'
       + '<span class="mr-sheet-row-label">' + o.l + '</span>'
       + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
       + '</div>';
@@ -558,8 +558,14 @@ window.mrOpenSortSheet = function() {
 
 window.mrApplySort = function(v) {
   _sortBy = v;
-  mrCloseSheet();
-  _renderItemsList();
+  // Update which row is selected without re-opening
+  document.querySelectorAll('.mr-sheet-row[data-sort]').forEach(function(row) {
+    row.classList.toggle('on', row.dataset.sort === v);
+  });
+  // Close sheet and update list
+  setTimeout(function() {
+    mrCloseSheet();
+  }, 150);
 };
 
 // ── Filter sheet ───────────────────────────────────────────
@@ -585,7 +591,7 @@ window.mrOpenFilterSheet = function() {
   ['all','due','received'].forEach(function(s) {
     var labels = { all: 'All items', due: 'Outstanding only', received: 'Received only' };
     var on = _filterStatus === s;
-    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrApplyFilterStatus(\'' + s + '\')">'
+    html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" data-status="' + s + '" onclick="mrApplyFilterStatus(\'' + s + '\')">'
       + '<span class="mr-sheet-row-label">' + labels[s] + '</span>'
       + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
       + '</div>';
@@ -596,7 +602,7 @@ window.mrOpenFilterSheet = function() {
     html += '<div class="mr-sheet-section">Equipment Type</div>';
     typeKeys.forEach(function(t) {
       var on = _filterTypes.has(t);
-      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrToggleFilterType(\'' + t.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
+      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" data-type="' + escH(t) + '" onclick="mrToggleFilterType(\'' + t.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
         + '<span class="mr-sheet-row-label">' + escH(t) + ' <span style="color:var(--text-tertiary);font-size:12px">(' + types[t] + ')</span></span>'
         + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
         + '</div>';
@@ -608,7 +614,7 @@ window.mrOpenFilterSheet = function() {
     html += '<div class="mr-sheet-section">Location</div>';
     locKeys.forEach(function(l) {
       var on = _filterLocations.has(l);
-      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" onclick="mrToggleFilterLoc(\'' + l.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
+      html += '<div class="mr-sheet-row' + (on ? ' on' : '') + '" data-loc="' + escH(l) + '" onclick="mrToggleFilterLoc(\'' + l.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')">'
         + '<span class="mr-sheet-row-label">' + escH(l) + ' <span style="color:var(--text-tertiary);font-size:12px">(' + locations[l] + ')</span></span>'
         + '<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
         + '</div>';
@@ -626,20 +632,25 @@ window.mrOpenFilterSheet = function() {
 
 window.mrApplyFilterStatus = function(s) {
   _filterStatus = s;
-  // Re-open sheet to refresh
-  mrOpenFilterSheet();
+  // Update Status section in place (no animation)
+  document.querySelectorAll('.mr-sheet-row[data-status]').forEach(function(row) {
+    row.classList.toggle('on', row.dataset.status === s);
+  });
 };
 
 window.mrToggleFilterType = function(t) {
   if (_filterTypes.has(t)) _filterTypes.delete(t);
   else _filterTypes.add(t);
-  mrOpenFilterSheet();
+  // Update only this row
+  var row = document.querySelector('.mr-sheet-row[data-type="' + t.replace(/"/g, '&quot;') + '"]');
+  if (row) row.classList.toggle('on', _filterTypes.has(t));
 };
 
 window.mrToggleFilterLoc = function(l) {
   if (_filterLocations.has(l)) _filterLocations.delete(l);
   else _filterLocations.add(l);
-  mrOpenFilterSheet();
+  var row = document.querySelector('.mr-sheet-row[data-loc="' + l.replace(/"/g, '&quot;') + '"]');
+  if (row) row.classList.toggle('on', _filterLocations.has(l));
 };
 
 window.mrClearFilters = function() {
