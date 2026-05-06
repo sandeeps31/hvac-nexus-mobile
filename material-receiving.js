@@ -107,7 +107,7 @@ async function _loadAll() {
 
   // Procurement items
   try {
-    var pRes = await window._supabase.from('procurement_schedule').select('data')
+    var pRes = await window._supabase.from('procurement').select('data')
       .eq('company_id', co).eq('project_num', _pNum).maybeSingle();
     var pData = pRes.data && pRes.data.data;
     if (Array.isArray(pData)) _items = pData;
@@ -177,7 +177,7 @@ async function _saveProcurement() {
   await window.dbReady;
   // Preserve any wrapper structure if it exists
   try {
-    var existing = await window._supabase.from('procurement_schedule').select('data')
+    var existing = await window._supabase.from('procurement').select('data')
       .eq('company_id', co).eq('project_num', _pNum).maybeSingle();
     var wrap = existing.data && existing.data.data;
     var payload;
@@ -186,12 +186,12 @@ async function _saveProcurement() {
     } else {
       payload = _items;
     }
-    return await window._supabase.from('procurement_schedule').upsert(
+    return await window._supabase.from('procurement').upsert(
       { project_num: _pNum, company_id: co, data: payload },
       { onConflict: 'project_num' }
     );
   } catch(e) {
-    return await window._supabase.from('procurement_schedule').upsert(
+    return await window._supabase.from('procurement').upsert(
       { project_num: _pNum, company_id: co, data: _items },
       { onConflict: 'project_num' }
     );

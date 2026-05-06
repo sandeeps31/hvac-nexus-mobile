@@ -3,7 +3,7 @@
    Service Worker: offline caching + background sync
    ============================================================ */
 
-var CACHE_NAME = 'hvacnexus-mobile-v30';
+var CACHE_NAME = 'hvacnexus-mobile-v31';
 
 // Files to cache for offline use
 var PRECACHE = [
