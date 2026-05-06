@@ -408,8 +408,12 @@ window.mrOpenReceive = function(supplier) {
   html += '</div>';
   html += '<input type="file" id="mr-photo-input" accept="image/*" capture="environment" style="display:none" onchange="mrPhotoSelected(event)">';
 
-  // Items section header with count
+  // Items section header with count + select all
   html += '<div class="mr-section-hdr"><span>Items</span><span id="mr-sel-count" style="color:var(--accent);font-weight:700">0 selected</span></div>';
+  html += '<div onclick="mrToggleSelectAll()" id="mr-select-all" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:11px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;-webkit-tap-highlight-color:transparent">'
+    + '<div id="mr-select-all-cb" style="width:22px;height:22px;border:2px solid var(--border);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-card)"><svg id="mr-select-all-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" style="width:14px;height:14px;display:none"><polyline points="20 6 9 17 4 12"/></svg></div>'
+    + '<span id="mr-select-all-label" style="font-size:14px;font-weight:600;color:var(--text-primary)">Select all visible</span>'
+    + '</div>';
 
   // Sort + Filter bar
   html += '<div class="mr-tools">'
@@ -530,6 +534,9 @@ function _renderItemsList() {
       + '</div>';
   });
   listEl.innerHTML = html;
+  _updateSelectAllState();
+  var countEl = document.getElementById('mr-sel-count');
+  if (countEl) countEl.textContent = _selected.size + ' selected';
 }
 
 // ── Sort sheet ─────────────────────────────────────────────
@@ -690,7 +697,81 @@ window.mrToggleItem = function(id) {
   var el = document.querySelector('.mr-item[data-id="' + id + '"]');
   if (el) el.classList.toggle('sel', _selected.has(id));
   document.getElementById('mr-sel-count').textContent = _selected.size + ' selected';
+  _updateSelectAllState();
 };
+
+window.mrToggleSelectAll = function() {
+  // Get IDs of currently visible (filtered) items
+  var visibleIds = _getFilteredItemIds();
+  // Check if all visible are already selected
+  var allSel = visibleIds.length > 0 && visibleIds.every(function(id) { return _selected.has(id); });
+
+  if (allSel) {
+    // Deselect all visible
+    visibleIds.forEach(function(id) {
+      _selected.delete(id);
+      _damaged.delete(id);
+    });
+  } else {
+    // Select all visible
+    visibleIds.forEach(function(id) { _selected.add(id); });
+  }
+
+  // Re-render items to reflect selection state
+  _renderItemsList();
+};
+
+function _getFilteredItemIds() {
+  var items = (window._mrAllItems || []).slice();
+  return items.filter(function(it) {
+    var enr = _enrichItem(it);
+    var qty = parseInt(it.qty,10)||1;
+    var del = parseInt(it.qtyDelivered,10)||0;
+    var outstanding = qty - del > 0;
+    if (_filterStatus === 'due' && !outstanding) return false;
+    if (_filterStatus === 'received' && outstanding) return false;
+    if (_filterTypes.size > 0 && !_filterTypes.has(enr.equipType || '')) return false;
+    if (_filterLocations.size > 0 && !_filterLocations.has(enr.location || '')) return false;
+    return true;
+  }).map(function(it) { return it.id; });
+}
+
+function _updateSelectAllState() {
+  var cb = document.getElementById('mr-select-all-cb');
+  var svg = document.getElementById('mr-select-all-svg');
+  var label = document.getElementById('mr-select-all-label');
+  if (!cb) return;
+  var visibleIds = _getFilteredItemIds();
+  var selVisible = visibleIds.filter(function(id) { return _selected.has(id); }).length;
+  var allSel = visibleIds.length > 0 && selVisible === visibleIds.length;
+  var someSel = selVisible > 0 && selVisible < visibleIds.length;
+
+  if (allSel) {
+    cb.style.background = 'var(--accent)';
+    cb.style.borderColor = 'var(--accent)';
+    if (svg) svg.style.display = 'block';
+  } else if (someSel) {
+    cb.style.background = 'var(--accent-dim)';
+    cb.style.borderColor = 'var(--accent)';
+    if (svg) svg.style.display = 'none';
+    // Show partial indicator (line)
+    cb.innerHTML = '<div style="width:10px;height:2px;background:var(--accent);border-radius:1px"></div>';
+  } else {
+    cb.style.background = 'var(--bg-card)';
+    cb.style.borderColor = 'var(--border)';
+    cb.innerHTML = '<svg id="mr-select-all-svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" style="width:14px;height:14px;display:none"><polyline points="20 6 9 17 4 12"/></svg>';
+  }
+
+  if (label) {
+    if (visibleIds.length === 0) {
+      label.textContent = 'No items';
+    } else if (allSel) {
+      label.textContent = 'Deselect all (' + visibleIds.length + ')';
+    } else {
+      label.textContent = 'Select all visible (' + visibleIds.length + ')';
+    }
+  }
+}
 
 window.mrToggleDmg = function(id) {
   if (_damaged.has(id)) _damaged.delete(id);
